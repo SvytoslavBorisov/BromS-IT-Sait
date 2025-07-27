@@ -19,9 +19,11 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@bromsit/crypto-core": ["./packages/crypto-core/src"],
+      "@bromsit/crypto-core/*": ["./packages/crypto-core/src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "./packages/crypto-core/src"],
+  "exclude": ["node_modules"],
 }

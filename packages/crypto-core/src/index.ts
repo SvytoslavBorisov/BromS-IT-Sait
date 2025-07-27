@@ -1,0 +1,1 @@
+export { splitSecret, combineSecret } from './splitter';
