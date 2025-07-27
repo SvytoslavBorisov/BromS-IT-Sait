@@ -1,1 +1,1 @@
-export { splitSecret, combineSecret } from './splitter';
+// export { splitSecret, combineSecret } from './splitter';
