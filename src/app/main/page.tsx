@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import styles from "./page.module.css";
-import { splitSecret, combineSecret } from '@bromsit/crypto-core';
+// import { splitSecret, combineSecret } from '@bromsit/crypto-core';
 export const dynamic = "force-dynamic";
 
 // общая функция чтения и подстановки шаблона
@@ -18,14 +18,14 @@ async function renderTemplate(
 
 export default async function MainPage() {
 
-   // разбили секрет на 5 частей, порог 3
-  const shares = splitSecret('super-секретный-ключ', 5, 3);
+  //  // разбили секрет на 5 частей, порог 3
+  // const shares = splitSecret('super-секретный-ключ', 5, 3);
 
-  // собрали обратно (например, первые 3 доли)
-  const recovered = combineSecret(shares.slice(0, 3));
+  // // собрали обратно (например, первые 3 доли)
+  // const recovered = combineSecret(shares.slice(0, 3));
 
-  console.log('Recovered:', recovered.toString('utf8'));
-  console.log(<pre>{JSON.stringify(shares.map(s=>s.toString('hex')), null, 2)}</pre>);
+  // console.log('Recovered:', recovered.toString('utf8'));
+  // console.log(<pre>{JSON.stringify(shares.map(s=>s.toString('hex')), null, 2)}</pre>);
 
 
   const templatesDir = path.join(process.cwd(), "src", "templates");
