@@ -1,7 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
 import styles from "./page.module.css";
-import CarouselClient from "./CarouselClient";
 import { splitSecret, combineSecret } from '@bromsit/crypto-core';
 export const dynamic = "force-dynamic";
 
@@ -30,24 +29,6 @@ export default async function MainPage() {
 
 
   const templatesDir = path.join(process.cwd(), "src", "templates");
-
-  // 1. main.html
-  const mainHtml = await renderTemplate(
-    path.join(templatesDir, "main.html"),
-    {
-      header: "Добро пожаловать на BromS АйТи",
-      content: "Минималистичный UI & чистый код.",
-    }
-  );
-
-  // 2. about.html
-  const aboutHtml = await renderTemplate(
-    path.join(templatesDir, "about.html"),
-    {
-      header: "О компании",
-      content: "Мы компания БромС и мы любим кодить",
-    }
-  );
 
   return (
     <div className={styles.wrapper}>

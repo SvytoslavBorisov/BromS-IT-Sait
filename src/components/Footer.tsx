@@ -18,7 +18,7 @@ export default function Footer() {
         <div>
           <h3 className="text-white text-lg font-semibold mb-4">Компания</h3>
           <p>
-            ООО «БромСит"<br />
+            ООО БромСит<br />
             ИНН: 1234567890<br />
             г. Москва, ул. Примерная, д. 1
           </p>
@@ -62,7 +62,7 @@ export default function Footer() {
       </div>
 
       <div className="border-t border-gray-800 mt-8 pt-4 pb-4 text-center">
-        <p>© {currentYear} ООО «БромСит». Все права защищены.</p>
+        <p>© {currentYear} ООО БромСит. Все права защищены.</p>
       </div>
     </footer>
   );

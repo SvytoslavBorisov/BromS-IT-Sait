@@ -8,7 +8,8 @@ export function initCarousel(root: HTMLElement) {
   const dots  = Array.from(
     root.querySelectorAll<HTMLElement>(`.${styles.dot}`)
   );
-  let index = 0, total = dots.length;
+  let index = 0;
+  const total = dots.length;
   alert(cards);
 
   const update = () => {
