@@ -1,14 +1,13 @@
 export const runtime = 'nodejs';
 
-import NextAuth from "next-auth";
-import type { NextAuthOptions } from "next-auth";
+import NextAuth from "next-auth/next";
 import GitHubProvider  from "next-auth/providers/github";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export const authOptions: NextAuthOptions = {
+const handler = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
     GitHubProvider({
@@ -20,13 +19,11 @@ export const authOptions: NextAuthOptions = {
     strategy: "database"
   },
   callbacks: {
-    // здесь гарантируем, что после успешного входа
-    // NextAuth всегда будет редиректить на "/"
-    async redirect({ url, baseUrl }) {
-      return "/";
+    // всегда редиректим на корень
+    async redirect({ baseUrl }) {
+      return baseUrl;
     },
-
-    // сохраняем id в сессии
+    // кладём id пользователя в session.user
     async session({ session, user }) {
       return {
         ...session,
@@ -37,7 +34,7 @@ export const authOptions: NextAuthOptions = {
       };
     }
   }
-};
+});
 
-const handler = NextAuth(authOptions);
+// Единственные разрешённые экспорты — методы HTTP
 export { handler as GET, handler as POST };
