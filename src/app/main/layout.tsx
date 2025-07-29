@@ -1,4 +1,5 @@
-"use client"; // чтобы Header (клиентский) работал
+"use client"; 
+
 import type { ReactNode } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";

@@ -30,8 +30,8 @@ export default function ProjectsSection() {
   }, []);
 
   return (
-    <section className="w-full bg-black">
-      <div className="max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+    <section className="w-full overflow-hidden bg-[rgb(5,5,5)]">
+      <div className="items-center overflow-hidden">
         {/* Слева: карусель с секциями из HTML */}
         <div className="w-full">
           {sections.length > 0 ? (
@@ -39,11 +39,6 @@ export default function ProjectsSection() {
           ) : (
             <div className="text-white text-center">Загрузка...</div>
           )}
-        </div>
-
-        {/* Справа: заголовок */}
-        <div className="w-full flex justify-end">
-          <h2 className="text-4xl font-bold text-white">Наши проекты</h2>
         </div>
       </div>
     </section>
