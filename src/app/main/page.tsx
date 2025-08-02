@@ -1,8 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
 import styles from "./page.module.css";
-// import { splitSecret, combineSecret } from '@bromsit/crypto-core';
 export const dynamic = "force-dynamic";
+
 
 // общая функция чтения и подстановки шаблона
 async function renderTemplate(

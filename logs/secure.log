@@ -1,0 +1,14 @@
+{"event":"auth_success","userId":"cmdubd8i10000t93c93k73c7g","email":"sv_borisov@mail.ru","timestamp":"2025-08-02T17:51:10.966Z"}
+{"event":"auth_success","userId":"cmdubd8i10000t93c93k73c7g","email":"sv_borisov@mail.ru","timestamp":"2025-08-02T18:30:07.552Z"}
+{"event":"shares_created","dealerId":"cmdubd8i10000t93c93k73c7g","prime":"1961768485736206605876683","threshold":1,"recipients":["cmdui1l590000t9l8b161sqzv"],"timestamp":"2025-08-02T18:41:44.496Z"}
+{"event":"auth_success","userId":"cmdui1l590000t9l8b161sqzv","email":"sv_borisov0@mail.ru","timestamp":"2025-08-02T18:42:09.331Z"}
+{"event":"shares_created","dealerId":"cmdui1l590000t9l8b161sqzv","prime":"59827835014877501119845191539","threshold":1,"recipients":["cmdubd8i10000t93c93k73c7g"],"timestamp":"2025-08-02T18:42:37.323Z"}
+{"event":"auth_success","userId":"cmdubd8i10000t93c93k73c7g","email":"sv_borisov@mail.ru","timestamp":"2025-08-02T18:42:49.976Z"}
+{"event":"auth_success","userId":"cmdubd8i10000t93c93k73c7g","email":"sv_borisov@mail.ru","timestamp":"2025-08-02T18:52:08.472Z"}
+{"event":"auth_success","userId":"cmdubd8i10000t93c93k73c7g","email":"sv_borisov@mail.ru","timestamp":"2025-08-02T18:52:16.316Z"}
+{"event":"auth_success","userId":"cmdui1l590000t9l8b161sqzv","email":"sv_borisov0@mail.ru","timestamp":"2025-08-02T18:52:25.808Z"}
+{"event":"auth_success","userId":"cmdubd8i10000t93c93k73c7g","email":"sv_borisov@mail.ru","timestamp":"2025-08-02T18:52:37.387Z"}
+{"event":"auth_success","userId":"cmdubd8i10000t93c93k73c7g","email":"sv_borisov@mail.ru","timestamp":"2025-08-02T18:57:37.672Z"}
+{"event":"shares_created","dealerId":"cmdubd8i10000t93c93k73c7g","prime":"135244024222906513912890493043","threshold":3,"recipients":["cmdum731u0009t9d8sflnq6ps","cmdum72wq0008t9d8ttj7lzzj","cmdum72mi0006t9d8mmbgwfzw","cmdum72cd0004t9d85qu4e5w4","cmdum72hg0005t9d8ohd8u1r2","cmdum72780003t9d82oy68zvo","cmdum71wr0001t9d8xtnjna7f","cmdum71nx0000t9d8dgvqwiu2","cmdum721s0002t9d8q20fsd20"],"timestamp":"2025-08-02T19:02:05.233Z"}
+{"event":"auth_success","userId":"cmdum72mi0006t9d8mmbgwfzw","email":"user7@example.com","timestamp":"2025-08-02T19:02:53.621Z"}
+{"event":"auth_success","userId":"cmdubd8i10000t93c93k73c7g","email":"sv_borisov@mail.ru","timestamp":"2025-08-02T19:06:13.519Z"}

@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { idbPut } from "@/lib/crypto/secure-storage";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -24,7 +25,21 @@ export default function RegisterPage() {
       });
 
       if (res.ok) {
-        // при успешной регистрации — переходим на страницу входа
+
+        // Web Crypto API
+        const keyPair = await crypto.subtle.generateKey(
+          { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1,0,1]), hash: "SHA-256" },
+          true,
+          ["encrypt", "decrypt"]
+        );
+
+        // Экспорт публичного ключа и отправка на сервер
+        const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+        await fetch("/api/me/pubkey", { method: "POST", body: JSON.stringify(pubJwk) });
+
+        await idbPut(
+          await crypto.subtle.exportKey("jwk", keyPair.privateKey)
+        );
         router.push("/auth/login");
       } else {
         const data = await res.json();

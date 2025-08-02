@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -13,20 +14,14 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
     const res = await signIn("credentials", {
-      redirect: false,        // отключаем авто-редирект
+      redirect: false,
       email,
       password,
-      callbackUrl: "/",       // <-- сюда
+      callbackUrl: "/profile",   // сюда придём после логина
     });
-
-    if (res?.error) {
-      setError("Неверный логин или пароль");
-    } else {
-      // если NextAuth вернул url, то на него, иначе на '/'
-      router.push(res?.url ?? "/");
-    }
+    
+    if (!res?.error) router.push(res.url!);
   };
   
   return (
