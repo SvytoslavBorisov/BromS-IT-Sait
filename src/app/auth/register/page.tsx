@@ -3,7 +3,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { idbPut } from "@/lib/crypto/secure-storage";
+import { storePrivateJwk } from "@/lib/crypto/secure-storage";
+import { jwkFingerprint }  from "@/lib/crypto/fingerprint";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -24,24 +25,9 @@ export default function RegisterPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      if (res.ok) {
-
-        // Web Crypto API
-        const keyPair = await crypto.subtle.generateKey(
-          { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1,0,1]), hash: "SHA-256" },
-          true,
-          ["encrypt", "decrypt"]
-        );
-
-        // Экспорт публичного ключа и отправка на сервер
-        const pubJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
-        await fetch("/api/me/pubkey", { method: "POST", body: JSON.stringify(pubJwk) });
-
-        await idbPut(
-          await crypto.subtle.exportKey("jwk", keyPair.privateKey)
-        );
-        router.push("/auth/login");
-      } else {
+    if (res.ok) {
+      router.push("/auth/login");
+    } else {
         const data = await res.json();
         setError(data.error || "Не удалось зарегистрироваться");
       }

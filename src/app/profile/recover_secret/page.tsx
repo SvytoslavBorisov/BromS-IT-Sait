@@ -1,106 +1,81 @@
-/* components/profile/RecoverSecret.tsx */
-
 "use client";
 
-import { useEffect, useState } from "react";
-import { reconstructSecret } from "@/lib/crypto/shamir";
-import { Card, CardHeader, CardContent } from "@/components/ui/cards";
-import { Button } from "@/components/ui/button";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-interface Share {
-  id: string;          // recipientId or share ID
-  x: string;           // stringified BigInt
-  ciphertext?: number[]; // we don't need ciphertext here
-  y?: string;          // stringified BigInt (for reconstruction)
+interface SessionInfo {
+  id: string;
+  threshold: number;
+  createdAt: string;
+  activeRecovery: { id: string; status: string } | null;
 }
 
-export default function RecoverSecret() {
-  const [shares, setShares] = useState<Share[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [recovered, setRecovered] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export default function RecoverListPage() {
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const router = useRouter();
 
-  // 1) Загрузить свои доли (y) и prime из API
-  const [prime, setPrime] = useState<bigint | null>(null);
   useEffect(() => {
-    fetch("/api/me/shares")  // эндпоинт отдаёт { prime, threshold, shares: [{ x, y }] }
-      .then((res) => res.json())
-      .then((data: { prime: string; shares: { x: string; y: string }[] }) => {
-        setPrime(BigInt(data.prime));
-        setShares(data.shares.map((s, i) => ({ id: `${s.x}-${i}`, x: s.x, y: s.y })));
-      })
-      .catch((e) => setError("Не удалось получить доли"));
+    (async () => {
+      try {
+        const res = await fetch("/api/recovery?role=dealer");
+        if (!res.ok) throw new Error("Не удалось загрузить сессии");
+        const { sessions } = await res.json();
+        setSessions(sessions);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const copy = new Set(prev);
-      copy.has(id) ? copy.delete(id) : copy.add(id);
-      return copy;
-    });
-  };
-
-  // 2) Собрать выбранные доли и восстановить
-  const handleRecover = () => {
-    if (!prime) return setError("Нет данных о простом модуле");
-    const pts: [bigint, bigint][] = shares
-      .filter((s) => selected.has(s.id) && s.y)
-      .map((s) => [BigInt(s.x), BigInt(s.y!)]);
-    try {
-      const secretBytes = reconstructSecret(pts, prime);
-      const decoder = new TextDecoder();
-      setRecovered(decoder.decode(secretBytes));
-      setError(null);
-    } catch (e: any) {
-      setError("Ошибка восстановления: " + e.message);
-    }
-  };
+  if (loading) return <p>Загрузка сессий…</p>;
+  if (error)   return <p className="text-red-500">Ошибка: {error}</p>;
 
   return (
-    <div className="space-y-6 p-4">
-      <Card>
-        <CardHeader title="Восстановление секрета" />
-        <CardContent>
-          {error && <p className="text-red-500">{error}</p>}
-          {!shares.length && !error && <p>Загрузка долей...</p>}
-
-          {shares.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 space-y-4">
-              {shares.map((s) => {
-                const isSel = selected.has(s.id);
-                return (
-                  <div
-                    key={s.id}
-                    onClick={() => toggle(s.id)}
-                    className={`border rounded-lg p-4 cursor-pointer transition 
-                      ${isSel ? "border-green-600 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}
-                  >
-                    <p className="font-medium">Доля x = {s.x}</p>
-                    <p className="text-sm text-gray-500">y = {s.y}</p>
-                    {isSel && (
-                      <span className="text-green-600 font-bold">Выбрано</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <Button
-            onClick={handleRecover}
-            disabled={selected.size < 2} // или порог, если его знаете
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Восстановить секрет</h1>
+      <ul className="space-y-4">
+        {sessions.map((s) => (
+          <li
+            key={s.id}
+            className="p-4 border rounded flex justify-between items-center"
           >
-            Восстановить секрет
-          </Button>
-
-          {recovered !== null && (
-            <div className="mt-4 p-4 bg-gray-50 border rounded">
-              <p className="font-medium mb-2">Восстановленный секрет:</p>
-              <code className="break-all">{recovered}</code>
+            <div>
+              <p><b>Сессия:</b> {s.id}</p>
+              <p>
+                <b>Порог:</b> {s.threshold} &nbsp;
+                {s.activeRecovery
+                  ? <span className="text-yellow-600">(восстановление {s.activeRecovery.status})</span>
+                  : null
+                }
+              </p>
+              <p className="text-sm text-gray-500">
+                создана {new Date(s.createdAt).toLocaleString()}
+              </p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div>
+              {s.activeRecovery ? (
+                <button
+                  disabled
+                  className="px-4 py-2 bg-gray-200 text-gray-600 rounded"
+                >
+                  Восстановление активно
+                </button>
+              ) : (
+                <button
+                  onClick={() => router.push(`/profile/recover_secret/${s.id}`)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Начать восстановление
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

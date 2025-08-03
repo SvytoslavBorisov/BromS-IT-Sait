@@ -28,8 +28,7 @@ export default function RecoverList() {
 
   return (
     <Card>
-      <CardHeader title="Выберите сессию для восстановления" />
-      <CardContent>
+      <CardHeader title="Выберите сессию для восстановления" /><CardContent>
         <ul className="space-y-2">
           {sessions.map((s) => (
             <li key={s.id}>

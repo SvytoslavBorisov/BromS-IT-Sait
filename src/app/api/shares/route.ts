@@ -47,9 +47,9 @@ export async function POST(request: Request) {
   await prisma.share.createMany({
     data: shares.map((s) => ({
       sessionId:  shamirSession.id,
-      userId:     s.recipientId,  // ← вот здесь было recipientId, теперь меняем на userId
+      userId:     s.recipientId,
       x:          s.x,
-      ciphertext: s.ciphertext,
+      ciphertext: s.ciphertext,  // Prisma Json — сохраняем Base64
     })),
   });
 

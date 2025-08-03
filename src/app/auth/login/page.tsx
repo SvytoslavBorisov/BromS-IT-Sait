@@ -21,7 +21,7 @@ export default function LoginPage() {
       callbackUrl: "/profile",   // сюда придём после логина
     });
     
-    if (!res?.error) router.push(res.url!);
+    if (!res?.error) router.push(res?.url!);
   };
   
   return (

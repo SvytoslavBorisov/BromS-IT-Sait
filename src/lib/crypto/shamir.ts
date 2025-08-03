@@ -176,22 +176,38 @@ export function reconstructSecret(
   sharesArr: [bigint, bigint][],
   prime: bigint
 ): Uint8Array {
-  if (!sharesArr.length) throw new Error('Need at least one share');
+  if (sharesArr.length === 0) {
+    throw new Error("Need at least one share");
+  }
+
+  // Lagrange interpolation at 0: secret = Σ_{i} y_i * l_i(0) mod prime
   let secretInt = 0n;
-  sharesArr.forEach(([i, yi]) => {
+
+  for (const [xi, yi] of sharesArr) {
+    // numerator = ∏_{j ≠ i} (0 - xj) = ∏( -xj )
     let num = 1n;
+    // denominator = ∏_{j ≠ i} (xi - xj)
     let den = 1n;
-    sharesArr.forEach(([j]) => {
-      if (j !== i) {
-        num = (num * -j) % prime;
-        den = (den * (i - j)) % prime;
-      }
-    });
-    const li = (num * modInverse(den, prime)) % prime;
-    secretInt = (secretInt + yi * li) % prime;
-  });
-  const hex = secretInt.toString(16).padStart(2, '0');
-  const buf = Buffer.from(hex.length % 2 ? '0' + hex : hex, 'hex');
+
+    for (const [xj] of sharesArr) {
+      if (xj === xi) continue;
+      num = (num * (prime - xj)) % prime;     // (0 - xj) mod prime
+      den = (den * (xi - xj)) % prime;
+    }
+
+    const invDen = modInverse(den, prime);
+    const li     = (num * invDen) % prime;
+    secretInt    = (secretInt + yi * li) % prime;
+  }
+
+  // Convert secretInt to hex string
+  let hex = secretInt.toString(16);
+  if (hex.length % 2 === 1) {
+    hex = "0" + hex;
+  }
+
+  // Buffer.from works in Node; in browser you can polyfill or use:
+  const buf = Buffer.from(hex, "hex");
   return new Uint8Array(buf);
 }
 

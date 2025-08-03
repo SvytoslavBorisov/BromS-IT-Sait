@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { jwk } = await request.json();
-  // Сохраняем в БД (предполагаем, что в модели User есть поле publicKey: Json)
+
   await prisma.user.update({
     where: { id: session?.user?.id },
     data: { publicKey: jwk },

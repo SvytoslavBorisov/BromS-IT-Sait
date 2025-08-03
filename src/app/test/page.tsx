@@ -1,153 +1,106 @@
+/* components/profile/RecoverSecret.tsx */
+
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  encryptAndStore,
-  loadAndDecrypt,
-} from "@/lib/crypto/secure-storage";
-import { shareSecret } from "@/lib/crypto/shamir";
+import { useEffect, useState } from "react";
+import { reconstructSecret } from "@/lib/crypto/shamir";
+import { Card, CardHeader, CardContent } from "@/components/ui/cards";
+import { Button } from "@/components/ui/button";
 
-// Шифрование доли публичным ключом
-async function encryptWithPubkey(share: string, jwkPub: JsonWebKey) {
-  const pub = await crypto.subtle.importKey(
-    "jwk",
-    jwkPub,
-    { name: "RSA-OAEP", hash: "SHA-256" },
-    false,
-    ["encrypt"]
-  );
-  const data = new TextEncoder().encode(share);
-  const ct = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, pub, data);
-  return new Uint8Array(ct);
+interface Share {
+  id: string;          // recipientId or share ID
+  x: string;           // stringified BigInt
+  ciphertext?: number[]; // we don't need ciphertext here
+  y?: string;          // stringified BigInt (for reconstruction)
 }
 
-export default function SecretManager() {
-  const [password, setPassword] = useState("");
-  const [secret, setSecret] = useState("");
-  const [participants, setParticipants] = useState<
-    { id: string; publicKey: JsonWebKey }[]
-  >([]);
-  const [threshold, setThreshold] = useState(2);
-  const [loadedSecret, setLoadedSecret] = useState<string | null>(null);
+export default function RecoverSecret() {
+  const [shares, setShares] = useState<Share[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [recovered, setRecovered] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Загружаем участников и их публичные ключи
+  // 1) Загрузить свои доли (y) и prime из API
+  const [prime, setPrime] = useState<bigint | null>(null);
   useEffect(() => {
-    fetch("/api/participants")
+    fetch("/api/me/shares")  // эндпоинт отдаёт { prime, threshold, shares: [{ x, y }] }
       .then((res) => res.json())
-      .then((data) => setParticipants(data))
-      .catch(console.error);
+      .then((data: { prime: string; shares: { x: string; y: string }[] }) => {
+        setPrime(BigInt(data.prime));
+        setShares(data.shares.map((s, i) => ({ id: `${s.x}-${i}`, x: s.x, y: s.y })));
+      })
+      .catch((e) => setError("Не удалось получить доли"));
   }, []);
 
-  // При изменении пароля — расшифровываем локально сохранённый секрет
-  useEffect(() => {
-    if (!password) {
-      setLoadedSecret(null);
-      return;
-    }
-    async function load() {
-      try {
-        const s = await loadAndDecrypt(password);
-        setLoadedSecret(s);
-      } catch {
-        setLoadedSecret("Неверный пароль");
-      }
-    }
-    load();
-  }, [password]);
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const copy = new Set(prev);
+      copy.has(id) ? copy.delete(id) : copy.add(id);
+      return copy;
+    });
+  };
 
-  // Сохранение и распределение секрета
-  const handleSave = async () => {
-    if (!password || !secret || participants.length < threshold) return;
+  // 2) Собрать выбранные доли и восстановить
+  const handleRecover = () => {
+    if (!prime) return setError("Нет данных о простом модуле");
+    const pts: [bigint, bigint][] = shares
+      .filter((s) => selected.has(s.id) && s.y)
+      .map((s) => [BigInt(s.x), BigInt(s.y!)]);
     try {
-      // 1) Сохраняем зашифрованный секрет локально
-      await encryptAndStore(secret, password);
-
-      // 2) Делим на доли
-      const { prime, points } = shareSecret(
-        new TextEncoder().encode(secret),
-        threshold,
-        participants.length
-      );
-
-      alert(points);
-
-      // 3) Шифруем каждую долю и готовим к отправке
-      const sharesPayload = await Promise.all(
-        points.map(async ([x, y], idx) => {
-          const { id, publicKey } = participants[idx];
-          const shareValue = y.toString(16);
-          const ciphertext = Array.from(
-            await encryptWithPubkey(shareValue, publicKey)
-          );
-          return {
-            id,
-            x: x.toString(),       // BigInt → string
-            ciphertext,            // Uint8Array → number[]
-          };
-        })
-      );
-
-
-      // 4) Отправляем на сервер
-      await fetch("/api/shares", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prime: prime.toString(),   // <— вот здесь
-          threshold,
-          shares: sharesPayload,
-        }),
-      });
-
-      setSecret("");
-      alert("Секрет успешно сохранён и распределён");
-    } catch (e) {
-      console.error(e);
-      alert("Не удалось сохранить или раздать доли");
+      const secretBytes = reconstructSecret(pts, prime);
+      const decoder = new TextDecoder();
+      setRecovered(decoder.decode(secretBytes));
+      setError(null);
+    } catch (e: any) {
+      setError("Ошибка восстановления: " + e.message);
     }
   };
 
   return (
-    <div className="p-4 max-w-md mx-auto">
-      <h2 className="text-xl mb-2">Управление секретом</h2>
+    <div className="space-y-6 p-4">
+      <Card>
+        <CardHeader title="Восстановление секрета" />
+        <CardContent>
+          {error && <p className="text-red-500">{error}</p>}
+          {!shares.length && !error && <p>Загрузка долей...</p>}
 
-      <input
-        type="password"
-        placeholder="Пароль для шифрования"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        className="w-full mb-2 p-2 border rounded"
-      />
+          {shares.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 space-y-4">
+              {shares.map((s) => {
+                const isSel = selected.has(s.id);
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => toggle(s.id)}
+                    className={`border rounded-lg p-4 cursor-pointer transition 
+                      ${isSel ? "border-green-600 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <p className="font-medium">Доля x = {s.x}</p>
+                    <p className="text-sm text-gray-500">y = {s.y}</p>
+                    {isSel && (
+                      <span className="text-green-600 font-bold">Выбрано</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-      <textarea
-        placeholder="Введите секрет"
-        value={secret}
-        onChange={(e) => setSecret(e.target.value)}
-        className="w-full mb-2 p-2 border rounded"
-      />
+          <Button
+            onClick={handleRecover}
+            disabled={selected.size < 2} // или порог, если его знаете
+          >
+            Восстановить секрет
+          </Button>
 
-      <input
-        type="number"
-        placeholder="Порог (t)"
-        value={threshold}
-        onChange={(e) => setThreshold(Number(e.target.value))}
-        className="w-full mb-2 p-2 border rounded"
-        min={1}
-        max={participants.length}
-      />
-
-      <button
-        onClick={handleSave}
-        className="w-full py-2 bg-blue-600 text-white rounded"
-      >
-        Сохранить и распределить
-      </button>
-
-      {loadedSecret !== null && (
-        <div className="mt-4 p-2 border">
-          <strong>Локально загруженный секрет:</strong> {loadedSecret}
-        </div>
-      )}
+          {recovered !== null && (
+            <div className="mt-4 p-4 bg-gray-50 border rounded">
+              <p className="font-medium mb-2">Восстановленный секрет:</p>
+              <code className="break-all">{recovered}</code>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

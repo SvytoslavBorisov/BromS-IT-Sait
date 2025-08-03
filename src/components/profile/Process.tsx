@@ -1,35 +1,33 @@
-/* components/profile/ProfileProcesses.tsx */
-
 "use client";
 
 import { useEffect, useState } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardHeader, CardContent } from "@/components/ui/cards";  
-import { Button } from "@/components/ui/button";                       
-import { useRouter } from "next/navigation";
+import { ScrollArea }            from "@/components/ui/scroll-area";
+import { Card, CardHeader, CardContent } from "@/components/ui/cards";
+import { Button }                from "@/components/ui/button";
+import { loadPrivateJwk }        from "@/lib/crypto/secure-storage";
+import { decodeCiphertext }      from "@/lib/crypto/keys";
+import { jwkFingerprint }        from "@/lib/crypto/fingerprint";
 
-interface Process {
-  id: string;
-  name: string;
-  status: "pending" | "in-progress" | "completed";
+interface ShareRequest {
+  id:         string;   // recoveryId
+  x:          string;   // coordinate
+  dealerId:   string;
+  ciphertext: unknown;  // raw from server
 }
 
 export default function ProfileProcesses() {
-  const [processes, setProcesses] = useState<Process[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
-  const router = useRouter();
+  const [requests, setRequests] = useState<ShareRequest[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
 
   useEffect(() => {
-    // TODO: заменить на реальный fetch
     (async () => {
+      setLoading(true);
       try {
-        const demo: Process[] = [
-          { id: "1", name: "Сбор долей ABC", status: "pending" },
-          { id: "2", name: "Анализ XYZ",    status: "in-progress" },
-          { id: "3", name: "Завершённый",   status: "completed" },
-        ];
-        setProcesses(demo);
+        const res = await fetch("/api/recovery?role=shareholder");
+        if (!res.ok) throw new Error("Не удалось загрузить запросы");
+        const json = await res.json() as { requests: ShareRequest[] };
+        setRequests(json.requests);
       } catch (e: any) {
         setError(e.message);
       } finally {
@@ -38,98 +36,96 @@ export default function ProfileProcesses() {
     })();
   }, []);
 
-  const handleDecision = (id: string, decision: "accept" | "decline") => {
-    // TODO: POST на сервер
-    setProcesses((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, status: "in-progress" } : p
-      )
-    );
-  };
+  const handleGive = async (req: ShareRequest) => {
+    setError(null);
+    try {
+      // 1. Декодируем и расшифровываем локально
+      const cipherBytes = decodeCiphertext(req.ciphertext);
+      const privJwk      = await loadPrivateJwk();
+      if (!privJwk) throw new Error("Приватный ключ не найден");
+      const privKey = await crypto.subtle.importKey(
+        "jwk", privJwk,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        false, ["decrypt"]
+      );
+      const plain = await crypto.subtle.decrypt(
+        { name: "RSA-OAEP"},
+        privKey,
+        cipherBytes
+      );
 
-  const handleCreateProject = () => {
-    router.push("/profile/create_shares");
+      // 2. Запрашиваем публичный ключ дилера
+      const pubRes = await fetch(`/api/users/${req.dealerId}/pubkey`);
+      if (!pubRes.ok) throw new Error("Нет публичного ключа дилера");
+      const { jwk: dealerPub } = await pubRes.json();
+
+      // 3. Шифруем тем ключом
+      const pubKey = await crypto.subtle.importKey(
+        "jwk", dealerPub,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        false, ["encrypt"]
+      );
+      const newCt = await crypto.subtle.encrypt(
+        { name: "RSA-OAEP"},
+        pubKey,
+        plain
+      );
+      const newCtB64 = btoa(String.fromCharCode(...new Uint8Array(newCt)));
+
+      // 4. Отправляем на сервер
+      const putRes = await fetch(`/api/recovery/${req.id}/receipt`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ciphertext: newCtB64 }),
+      });
+      if (!putRes.ok) {
+        const err = await putRes.json();
+        throw new Error(err.error || putRes.statusText);
+      }
+
+      // 5. Убираем этот запрос из списка
+      setRequests(rs => rs.filter(r => r.id !== req.id));
+    } catch (e: any) {
+      setError(e.message);
+    }
   };
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">Ваши процессы</h1>
+        <h1 className="text-2xl font-semibold">Запросы на отдачу доли</h1>
         <p className="text-sm text-gray-600">
-          Здесь отображаются процессы, в которых вы участвуете
+          Здесь вы видите, когда дилер просит вашу долю
         </p>
       </div>
 
       <Card>
-        <CardHeader title="Список процессов" />
+        <CardHeader title="Ожидающие запросы" />
         <CardContent>
-          {loading && <p>Загрузка процессов…</p>}
+          {loading && <p>Загрузка…</p>}
           {error   && <p className="text-red-500">Ошибка: {error}</p>}
 
           {!loading && !error && (
             <ScrollArea className="h-48">
               <ul className="space-y-3">
-                {processes.map((proc) => (
-                  <li key={proc.id} className="flex justify-between items-center">
+                {requests.length === 0 ? (
+                  <li>Нет активных запросов</li>
+                ) : requests.map((req) => (
+                  <li key={req.id} className="flex justify-between items-center">
                     <div>
-                      <p className="font-medium">{proc.name}</p>
-                      <p className="text-xs text-gray-500">
-                        Статус:{" "}
-                        <span
-                          className={
-                            proc.status === "pending"
-                              ? "text-yellow-600"
-                              : proc.status === "in-progress"
-                              ? "text-blue-600"
-                              : "text-green-600"
-                          }
-                        >
-                          {proc.status === "pending"
-                            ? "Ожидание решения"
-                            : proc.status === "in-progress"
-                            ? "В процессе"
-                            : "Завершён"}
-                        </span>
+                      <p className="font-medium">
+                        Дилер {req.dealerId} просит вашу долю x={req.x}
                       </p>
                     </div>
-                    <div className="space-x-2">
-                      {proc.status === "pending" ? (
-                        <>
-                          <Button
-                            variant="outline"
-                            onClick={() => handleDecision(proc.id, "accept")}
-                          >
-                            Отправить
-                          </Button>
-                          <Button
-                            variant="primary"
-                            onClick={() => handleDecision(proc.id, "decline")}
-                          >
-                            Не отправлять
-                          </Button>
-                        </>
-                      ) : proc.status === "in-progress" ? (
-                        <p className="text-sm text-gray-500">Решение отправлено</p>
-                      ) : (
-                        <p className="text-sm text-green-600">Завершено</p>
-                      )}
-                    </div>
+                    <Button onClick={() => handleGive(req)}>
+                      Отдать долю
+                    </Button>
                   </li>
                 ))}
               </ul>
             </ScrollArea>
           )}
         </CardContent>
-      </Card>
-
-      <Card>
-      <CardHeader title="Действия" />
-      <CardContent>
-          <div className="space-y-4">
-            <p>Создавайте и управляйте своими проектами:</p>
-            <Button onClick={handleCreateProject}>Создать проект</Button>
-          </div>
-      </CardContent>
       </Card>
     </div>
   );

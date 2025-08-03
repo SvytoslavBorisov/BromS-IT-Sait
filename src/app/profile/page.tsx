@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";           // ① импорт
-import { generateAndUploadKey } from "@/lib/crypto/keys";
 import Sidebar from "@/components/profile/Sidebar";
 import ProfileDetails from "@/components/profile/ProfileDetails";
 import Settings from "@/components/profile/Settings";
@@ -16,10 +15,6 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<
     "profile" | "keys" | "all_keys" |"process" | "security" | "settings" 
   >("profile");
-
-  useEffect(() => {
-    generateAndUploadKey().catch(console.error);
-  }, []);
 
   return (
     <div className="min-h-screen flex bg-gray-100">

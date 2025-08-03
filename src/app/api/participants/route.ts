@@ -12,7 +12,7 @@ export async function GET(req: Request) {
 
   // Получаем из БД всех пользователей с publicKey
   const participants = await prisma.user.findMany({
-    where: { publicKey: { not: null } },
+    where: { publicKey: { not: undefined } },
     select: {
       id: true,
       publicKey: true,

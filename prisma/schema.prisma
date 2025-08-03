@@ -61,6 +61,9 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime? @updatedAt
 
+  recoverySessions RecoverySession[] @relation("RecoveryDealer")
+  shareReceipts    ShareReceipt[]    @relation("ReceiptShareholder")
+
   accounts       Account[]
   sessions       Session[]
 }
@@ -74,23 +77,60 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-model ShamirSession {
-  id         String    @id @default(cuid())
-  dealerId   String
-  prime      String
-  threshold  Int
-  createdAt  DateTime  @default(now())
-  shares     Share[]   @relation("SessionShares")
+ model ShamirSession {
+   id         String    @id @default(cuid())
+   dealerId   String
+   prime      String
+   threshold  Int
+   createdAt  DateTime  @default(now())
+   shares     Share[]   @relation("SessionShares")
+
+
+   recoveries  RecoverySession[]
+ }
+
+ model Share {
+   id            Int      @id @default(autoincrement())
+   sessionId     String   @default("")
+   userId        String
+   x             String
+   ciphertext    Json
+   createdAt     DateTime @default(now())
+   session       ShamirSession @relation("SessionShares", fields: [sessionId], references: [id])
+
+   user       User     @relation("UserShares", fields: [userId], references: [id])
+ }
+
+ model RecoverySession {
+   id              String   @id @default(cuid())
+   dealerId        String
+   dealer          User         @relation("RecoveryDealer", fields:[dealerId], references:[id])
+
+   shareSessionId  String
+   shareSession    ShamirSession @relation(fields:[shareSessionId], references:[id])
+
+   status      RecoveryStatus @default(PENDING)
+   createdAt   DateTime       @default(now())
+   finishedAt  DateTime?
+
+   receipts    ShareReceipt[]
+ }
+
+model ShareReceipt {
+  id             String   @id @default(cuid())
+  recoveryId     String
+  recovery       RecoverySession @relation(fields:[recoveryId], references:[id])
+
+  shareholderId  String
+  shareholder    User            @relation("ReceiptShareholder", fields:[shareholderId], references:[id])
+
+  ciphertext Json?
+  receivedAt DateTime @default(now())
+  @@unique([recoveryId, shareholderId])
 }
 
-model Share {
-  id            Int      @id @default(autoincrement())
-  sessionId     String   @default("")
-  userId        String
-  x             String
-  ciphertext    Json
-  createdAt     DateTime @default(now())
-  session       ShamirSession @relation("SessionShares", fields: [sessionId], references: [id])
-
-  user       User     @relation("UserShares", fields: [userId], references: [id])
+enum RecoveryStatus {
+  PENDING
+  DONE
+  CANCELED
 }

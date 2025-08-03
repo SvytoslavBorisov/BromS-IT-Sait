@@ -49,6 +49,7 @@ export default function CreateShares() {
         const { publicKey } = participants.find(p => p.id === recipientId)!;
         const shareHex = y.toString(16);
         const ct = await encryptWithPubkey(shareHex, publicKey);
+        
         return {
           recipientId,
           x: x.toString(),
