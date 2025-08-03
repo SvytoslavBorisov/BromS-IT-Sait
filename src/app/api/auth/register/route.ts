@@ -22,7 +22,7 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
+    const { name, email, password } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -46,6 +46,7 @@ export async function POST(request: Request) {
     // Создаём нового пользователя
     const user = await prisma.user.create({
       data: {
+        name,
         email,
         passwordHash,
       },

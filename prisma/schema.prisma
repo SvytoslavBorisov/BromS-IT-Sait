@@ -56,18 +56,21 @@ model User {
   publicKey      Json?
   image          String?
 
-  shares       Share[]  @relation("UserShares")
+  shares         Share[]           @relation("UserShares")
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime? @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime?         @updatedAt
 
   recoverySessions RecoverySession[] @relation("RecoveryDealer")
   shareReceipts    ShareReceipt[]    @relation("ReceiptShareholder")
 
   accounts       Account[]
   sessions       Session[]
-}
 
+  managerId      String?            // ссылка на руководителя
+  manager        User?              @relation("UserHierarchy", fields: [managerId], references: [id])
+  reports        User[]             @relation("UserHierarchy")
+}
 model VerificationToken {
   identifier String
   token      String   @unique
@@ -126,7 +129,7 @@ model ShareReceipt {
 
   ciphertext Json?
   receivedAt DateTime @default(now())
-  @@unique([recoveryId, shareholderId])
+  
 }
 
 enum RecoveryStatus {

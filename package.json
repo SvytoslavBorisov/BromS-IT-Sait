@@ -28,7 +28,9 @@
     "next-auth": "^4.24.11",
     "pino": "^9.7.0",
     "prisma": "^6.12.0",
+    "rc-tree": "^5.13.1",
     "react": "^19.0.0",
+    "react-d3-tree": "^3.6.6",
     "react-dom": "^19.0.0",
     "shamirs-secret-sharing": "^2.0.1"
   },

@@ -3,58 +3,60 @@
 const DB_NAME = 'secureStorage';
 const STORE_NAME = 'store';
 
-// Записи ключей
-const PRIVATE_JWK_KEY = 'private_jwk';
-const SECRET_RECORD_KEY = 'encrypted_secret';
+// Ключи внутри objectStore
+const PRIVATE_JWK_PREFIX = 'private_jwk';      // для приватных ключей: PRIVATE_JWK_PREFIX + '_' + userId
+const SECRET_RECORD_KEY = 'encrypted_secret';  // остаётся глобально, если так нужно
 
-// AES-GCM параметры
-const SALT_BYTES = 16;
-const IV_BYTES = 12;
-
-// старый стор, где лежала AES-ги́пер-структура
+// Старый store для миграции
 const OLD_STORE = 'secrets';
-// версия БД увеличена на 1
+// При переходе версии increment на 2
 const DB_VERSION = 2;
 
+/**
+ * Открывает IndexedDB, создаёт/мигрирует хранилище.
+ */
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+
     request.onupgradeneeded = () => {
       const db = request.result;
 
-      // 1) если нет нового стора — создаём его
+      // 1) создаём новый store, если ещё нет
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME);
       }
 
-      // 2) для миграции: если ещё есть старый стор 'secrets', забираем из него данные
+      // 2) миграция: если есть старый store, переносим из него все ключи
       if (db.objectStoreNames.contains(OLD_STORE)) {
         const oldStore = request.transaction!.objectStore(OLD_STORE);
-        const tempData: any = {};
-        oldStore.openCursor().onsuccess = e => {
+        const tempData: Record<string, any> = {};
+
+        oldStore.openCursor().onsuccess = (e) => {
           const cursor = (e.target as IDBRequest).result;
           if (cursor) {
-            tempData[cursor.key] = cursor.value;
+            tempData[cursor.key as string] = cursor.value;
             cursor.continue();
           } else {
-            // как только прочитали всё из старого стор, кладём в новый
+            // когда всё прочитали — переносим в новый
             const newStore = request.transaction!.objectStore(STORE_NAME);
             for (const [key, val] of Object.entries(tempData)) {
               newStore.put(val, key);
             }
-            // и затем удаляем старый стор
+            // и удаляем старый store
             db.deleteObjectStore(OLD_STORE);
           }
         };
       }
     };
+
     request.onsuccess = () => resolve(request.result);
     request.onerror   = () => reject(request.error);
   });
 }
 
 /**
- * Записывает значение по ключу в IndexedDB
+ * Записывает произвольное значение по ключу в IndexedDB
  */
 async function putValue(key: string, value: any): Promise<void> {
   const db = await openDatabase();
@@ -62,12 +64,12 @@ async function putValue(key: string, value: any): Promise<void> {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(value, key);
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror    = () => reject(tx.error);
   });
 }
 
 /**
- * Получает значение по ключу из IndexedDB
+ * Читает значение из IndexedDB по ключу
  */
 async function getValue<T = any>(key: string): Promise<T | null> {
   const db = await openDatabase();
@@ -75,38 +77,68 @@ async function getValue<T = any>(key: string): Promise<T | null> {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const req = tx.objectStore(STORE_NAME).get(key);
     req.onsuccess = () => resolve(req.result ?? null);
-    req.onerror = () => reject(req.error);
+    req.onerror   = () => reject(req.error);
   });
 }
 
-/** Сохраняет приватный JWK-ключ */
-export async function storePrivateJwk(jwk: JsonWebKey): Promise<void> {
-  await putValue(PRIVATE_JWK_KEY, jwk);
+/**
+ * Удаляет запись по ключу
+ */
+async function deleteValue(key: string): Promise<void> {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
 }
 
-/** Получает приватный JWK-ключ */
-export async function loadPrivateJwk(): Promise<JsonWebKey | null> {
-  return getValue<JsonWebKey>(PRIVATE_JWK_KEY);
+/** Собирает ключ в objectStore для конкретного пользователя */
+function privateJwkKey(userId: string): string {
+  return `${PRIVATE_JWK_PREFIX}_${userId}`;
 }
 
-/** Шифрует и сохраняет секрет паролем */
+/** Сохраняет приватный JWK под userId */
+export async function storePrivateJwk(
+  userId: string,
+  jwk: JsonWebKey
+): Promise<void> {
+  const key = privateJwkKey(userId);
+  await putValue(key, jwk);
+}
+
+/** Загружает приватный JWK для userId */
+export async function loadPrivateJwk(
+  userId: string
+): Promise<JsonWebKey | null> {
+  const key = privateJwkKey(userId);
+  return getValue<JsonWebKey>(key);
+}
+
+/** Опционально: удаляет приватный JWK при необходимости */
+export async function clearPrivateJwk(
+  userId: string
+): Promise<void> {
+  const key = privateJwkKey(userId);
+  await deleteValue(key);
+}
+
+/** Шифрует и сохраняет секрет паролем (осталось без изменений) */
 export async function encryptAndStore(
   secret: string,
   password: string
 ): Promise<void> {
+  const SALT_BYTES = 16;
+  const IV_BYTES = 12;
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
 
-  // Выводим данные в консоль (debug)
   console.debug('encryptAndStore salt:', salt, 'iv:', iv);
 
   const key = await deriveKey(password, salt);
   const data = new TextEncoder().encode(secret);
-  const ct = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    data
-  );
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
 
   const record = {
     salt: Array.from(salt),
@@ -116,7 +148,7 @@ export async function encryptAndStore(
   await putValue(SECRET_RECORD_KEY, record);
 }
 
-/** Загружает и расшифровывает секрет паролем */
+/** Загружает и расшифровывает секрет паролем (осталось без изменений) */
 export async function loadAndDecrypt(
   password: string
 ): Promise<string | null> {
@@ -134,18 +166,14 @@ export async function loadAndDecrypt(
 
   const key = await deriveKey(password, salt);
   try {
-    const plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      ct
-    );
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
     return new TextDecoder().decode(plain);
   } catch {
     return null;
   }
 }
 
-/** Выводит CryptoKey из пароля и соли */
+/** Деривация ключа из пароля и соли (осталась без изменений) */
 async function deriveKey(
   password: string,
   salt: Uint8Array

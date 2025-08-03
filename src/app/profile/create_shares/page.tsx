@@ -42,6 +42,7 @@ export default function CreateShares() {
       threshold,
       Array.from(selected).length
     );
+    
     // 2) шифруем и собираем payload
     const payload = await Promise.all(
       points.map(async ([x, y], idx) => {
