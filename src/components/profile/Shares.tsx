@@ -33,15 +33,7 @@ interface Share {
   };
 }
 
-// Передаём в компонент параметры VSS-сессии
-interface MySharesProps {
-  p:          bigint;
-  q:          bigint;
-  g:          bigint;
-  commitments: bigint[];
-}
-
-export default function MyShares({ p, q, g, commitments }: MySharesProps) {
+export default function MyShares() {
   const [shares, setShares] = useState<Share[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +41,7 @@ export default function MyShares({ p, q, g, commitments }: MySharesProps) {
 
   const privKeyRef = useRef<CryptoKey | null>(null);
 
+  // Получение своих долей
   useEffect(() => {
     fetch("/api/me/shares")
       .then(res => {

@@ -29,6 +29,7 @@ interface DealerRecoveryProps {
   commitments: bigint[];
   threshold:  number;
   shares:     VSSShare[];
+  status_recovery:     String
 }
 
 export default function DealerRecovery({
@@ -39,6 +40,7 @@ export default function DealerRecovery({
   commitments,
   threshold,
   shares,
+  status_recovery
 }: DealerRecoveryProps) {
   const [recoveryId,    setRecoveryId]    = useState<string | null>(null);
   const [error,         setError]         = useState<string | null>(null);

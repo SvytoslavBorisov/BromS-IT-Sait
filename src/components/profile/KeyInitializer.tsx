@@ -6,7 +6,6 @@ import { jwkFingerprint } from "@/lib/crypto/fingerprint";
 import {
   storePrivateJwk,
   loadPrivateJwk,
-  // clearPrivateJwk,  // теперь используем только по запросу в Settings
 } from "@/lib/crypto/secure-storage";
 
 export default function KeyInitializer() {

@@ -61,10 +61,8 @@ export default function ProfileProcesses() {
         ["decrypt"]
       );
 
-      console.log('Ломается тут1', req.ciphertext);
       // b) расшифруем пришедший ciphertext (массив чисел)
       const cipherBytes = decodeCiphertext(req.ciphertext);
-      console.log('Ломается тут2', cipherBytes);
       const plainBuf    = await crypto.subtle.decrypt(
         { name: "RSA-OAEP" },
         privKey,
@@ -77,7 +75,6 @@ export default function ProfileProcesses() {
         { name: "RSA-OAEP", hash: "SHA-256" },
         false, ["encrypt"]
       );
-      console.log('Доля', plainBuf);
       
       // 5) Шифруем ваш открытый буфер этим ключом
       const newCtBuf = await crypto.subtle.encrypt(
@@ -93,25 +90,16 @@ export default function ProfileProcesses() {
       for (let i = 0; i < newCtArr.length; i++) {
         bin += String.fromCharCode(newCtArr[i]);
       }
-
-      // 3) Кодируем в Base64
       const b64 = btoa(bin); 
-      // b64 = "O4jCmTZ1DS0K1x3wyyFR+/3i+..."
-
-      // 4) Разбиваем строку на массив одиночных символов
       const charArr = b64.split(""); 
-      // ["O","4","j","C","m","T","Z","1",…,"=","="]
-
-      // 5) Если нужен строковый литерал JSON, можно:
       const json = JSON.stringify(charArr);
-
-      // 7) Отправляем именно этот массив байт
-      console.log('Process', json);
+      
       const putRes = await fetch(`/api/recovery/${req.id}/receipt`, {
         method:  "PUT",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ ciphertext: json }),
       });
+      
       if (!putRes.ok) {
         const err = await putRes.json();
         throw new Error(err.error || putRes.statusText);

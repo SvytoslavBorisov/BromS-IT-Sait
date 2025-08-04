@@ -59,6 +59,8 @@ export async function PUT(
     },
   });
 
+  console.log('Receive', updateResult);
+
   if (updateResult.count === 0) {
     return NextResponse.json(
       { error: "Receipt already submitted or not found" },
@@ -86,6 +88,8 @@ export async function PUT(
   }
 
   const receivedCount = recovery.receipts.filter(r => r.ciphertext !== null).length;
+
+  console.log('receivedCount', receivedCount, recovery.shareSession.threshold);
 
   if (
     receivedCount >= recovery.shareSession.threshold &&

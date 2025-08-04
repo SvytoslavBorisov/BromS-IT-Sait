@@ -7,6 +7,9 @@ import { authOptions }          from "@/app/api/auth/[...nextauth]/route";
 import { log }                  from "@/lib/logger";
 
 export async function POST(request: Request) {
+
+  console.log('Я тут');
+
   // 1) Авторизация
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -14,6 +17,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  console.log('Я тут');
+  
   // 2) Читаем тело — нам нужен только shareSessionId
   const { shareSessionId } = (await request.json()) as { shareSessionId?: string };
   if (!shareSessionId) {
@@ -35,6 +40,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  console.log('Я тут');
+
   // 4) Собираем из Share все userId, кому мы когда-то отправили доли
   const shares = await prisma.share.findMany({
     where: { sessionId: shareSessionId },
@@ -48,18 +55,31 @@ export async function POST(request: Request) {
     );
   }
 
+  const existing = await prisma.recoverySession.findFirst({
+    where: {
+      shareSessionId: shareSessionId,
+      dealerId:       sessionRec.dealerId
+    }
+  });
+  if (existing) {
+      return NextResponse.json({ recoveryId: existing.id });
+  }
   // 5) Создаём RecoverySession и создаём все записи receipt
+  // src/app/api/recovery/route.ts (POST)
   const recovery = await prisma.recoverySession.create({
     data: {
       dealerId:       sessionRec.dealerId,
       shareSessionId: shareSessionId,
-      receipts: {
-        createMany: {
-          data: shareholderIds.map((userId) => ({ shareholderId: userId })),
-        },
-      },
     },
   });
+  
+  const receipts = await prisma.shareReceipt.createMany({
+    data: shareholderIds.map((userId) => ({
+      recoveryId:     recovery.id,     // связываем с только что созданной сессией
+      shareholderId:  userId,          // каждый из переданных идентификаторов
+      shareSessionId,                  // если в модели оно есть
+    })),
+});
 
   log({
     event:      "recovery_started",
@@ -71,7 +91,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ recoveryId: recovery.id });
 }
-
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -90,7 +109,9 @@ export async function GET(request: Request) {
     const pending = await prisma.shareReceipt.findMany({
       where: {
         shareholderId: userId,
-        ciphertext:    undefined,    // ещё не ваша ответка
+        ciphertext: {
+          equals: null as any   // приводим к JsonValue, чтобы TS не ругался
+        },
       },
       include: {
         recovery: {
@@ -109,6 +130,8 @@ export async function GET(request: Request) {
         },
       },
     });
+
+    console.log(pending);
 
     // 3) Мапим на то, что ждёт клиент
     const requests = pending.map((r) => {
@@ -139,6 +162,7 @@ if (role === "dealer") {
       id:        true,
       threshold: true,
       createdAt: true,
+      dealerId: true
     },
     orderBy: { createdAt: "desc" },
   });
@@ -146,21 +170,37 @@ if (role === "dealer") {
   // 3) для каждой сессии считаем общее количество долей и вернувшиеся
   const result = await Promise.all(
     sessions.map(async (s) => {
+      // 1) Считаем общее число долей и число уже возвращённых:
       const total = await prisma.share.count({
         where: { sessionId: s.id },
       });
       const returned = await prisma.share.count({
         where: {
           sessionId: s.id,
-          ciphertext: { not: [] },  // массив уже заполнен
+          ciphertext: { not: [] },
         },
       });
+
+      // 2) Ищем, есть ли уже запущенная сессия восстановления для этой ShamirSession
+      const rec = await prisma.recoverySession.findFirst({
+        where: { shareSessionId: s.id },
+        select: {
+          dealerId: true,
+          status:   true,
+        },
+        orderBy: { createdAt: "desc" },  // если их несколько, берём последнюю
+      });
+
+      console.log('s', s);
+
       return {
-        sessionId: s.id,
-        createdAt: s.createdAt,
-        threshold: s.threshold,
+        id:             s.id,
+        createdAt:      s.createdAt,
+        threshold:      s.threshold,
         total,
         returned,
+        creatorId:      s.dealerId   ?? null,
+        recoveryStatus: rec?.status     ?? 'NO ACTION',
       };
     })
   );

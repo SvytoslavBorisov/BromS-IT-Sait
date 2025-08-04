@@ -121,6 +121,8 @@ model Share {
   session               ShamirSession   @relation("SessionShares", fields: [sessionId], references: [id])
   user                  User            @relation("UserShares",    fields: [userId],    references: [id])
 
+  receipts      ShareReceipt[]    
+
   @@unique([sessionId, userId], name: "Share_sessionId_userId")
 }
 
@@ -147,9 +149,22 @@ model ShareReceipt {
   shareholderId  String
   shareholder    User            @relation("ReceiptShareholder", fields:[shareholderId], references:[id])
 
-  ciphertext Json?
+  shareSessionId String  
+  share          Share           @relation(fields: [shareSessionId, shareholderId], references: [sessionId, userId])
+
+  ciphertext Json @default("[]")
   receivedAt DateTime @default(now())
-  
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  type        String    // e.g. "recover_secret", "message", "alert"
+  payload     Json      // любые данные, связанные с уведомлением
+  isRead      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id])
 }
 
 enum RecoveryStatus {

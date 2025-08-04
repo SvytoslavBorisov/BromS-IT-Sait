@@ -37,6 +37,8 @@ export async function GET(
   if (!recovery) {
     return NextResponse.json({ error: "RecoverySession не найдена" }, { status: 404 });
   }
+
+  
   if (recovery.status !== "DONE") {
     return NextResponse.json(
       { error: "Недостаточно ответов для восстановления" },

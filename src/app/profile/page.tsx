@@ -60,8 +60,9 @@ export default function ProfilePage() {
         {activeTab === "keys"     && <MyShares />}
         {activeTab === "all_keys" && <RecoverList />}
         {activeTab === "process"  && <ProfileProcesses />}
-        {activeTab === "settings" && <Settings />}
         {activeTab === "security" && <Security />}
+        {activeTab === "settings" && <Settings />}
+       
       </main>
     </div>
   );

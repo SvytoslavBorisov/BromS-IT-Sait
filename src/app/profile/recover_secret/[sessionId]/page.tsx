@@ -11,7 +11,7 @@ export default async function RecoverPage({
   // обязательно ждём params перед использованием
   const { sessionId } = await params;
 
-  const recoverySession = await prisma.recoverySession.findMany({
+  const recoverySession = await prisma.recoverySession.findFirst({
     where: { shareSessionId: sessionId },
     select: {
       // Параметры самой RecoverySession
@@ -38,6 +38,9 @@ export default async function RecoverPage({
           shareholderId:true,
           ciphertext:   true,
           receivedAt:   true,
+          share: {       // вот здесь подпроекцию
+            select: { x: true }
+          }
         }
       }
     }
@@ -109,6 +112,34 @@ export default async function RecoverPage({
     );
   }
   else {
-    
+
+    const p           = BigInt(recoverySession.shareSession.p);
+    const q           = BigInt(recoverySession.shareSession.q);
+    const g           = BigInt(recoverySession.shareSession.g);
+    const commitments = (recoverySession.shareSession.commitments as string[])
+      .map((c) => BigInt(c));
+    const threshold   = recoverySession.shareSession.threshold;
+    const sharesTyped = recoverySession.receipts.map((r) => ({
+      x:          r.share.x,
+      userId:     r.shareholderId,
+      ciphertext: r.ciphertext as number[],
+    }));
+
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-semibold mb-4">
+          Восстановление секрета
+        </h1>
+        <DealerRecovery
+          sessionId={sessionId}
+          p={p}
+          q={q}
+          g={g}
+          commitments={commitments}
+          threshold={threshold}
+          shares={sharesTyped}
+        />
+      </div>
+    );
   }
 }
