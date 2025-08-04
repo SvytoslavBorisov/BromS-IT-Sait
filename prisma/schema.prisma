@@ -80,29 +80,49 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
- model ShamirSession {
-   id         String    @id @default(cuid())
-   dealerId   String
-   prime      String
-   threshold  Int
-   createdAt  DateTime  @default(now())
-   shares     Share[]   @relation("SessionShares")
+model ShamirSession {
+  id          String    @id @default(cuid())
+  dealerId    String
+  p           String    @default("")        // пустая строка
+  q           String    @default("")
+  g           String    @default("")
+  commitments Json      @default("[]")      // пустой JSON-массив
+  threshold   Int
+  createdAt   DateTime  @default(now())
 
+  shares      Share[]   @relation("SessionShares")
+  recoveries  RecoverySession[]
+}
 
-   recoveries  RecoverySession[]
- }
+model Share {
+  id                    Int             @id @default(autoincrement())
+  sessionId             String          @default("")
+  userId                String
+  x                     String
+  ciphertext            Json
+  createdAt             DateTime        @default(now())
 
- model Share {
-   id            Int      @id @default(autoincrement())
-   sessionId     String   @default("")
-   userId        String
-   x             String
-   ciphertext    Json
-   createdAt     DateTime @default(now())
-   session       ShamirSession @relation("SessionShares", fields: [sessionId], references: [id])
+  // ── Новые поля ────────────────────────────────────────────────────────────
 
-   user       User     @relation("UserShares", fields: [userId], references: [id])
- }
+  /// Статус доли (по умолчанию ACTIVE)
+  status                ShareStatus     @default(ACTIVE)
+
+  /// Произвольный комментарий
+  comment               String          @default("")
+
+  /// Алгоритм шифрования, которым шифровали эту долю
+  encryptionAlgorithm   String          @default("RSA-OAEP-SHA256")
+
+  /// Время истечения доли; `null` = неограниченно
+  expiresAt             DateTime?       
+
+  // ── Отношения и индексы ────────────────────────────────────────────────────
+
+  session               ShamirSession   @relation("SessionShares", fields: [sessionId], references: [id])
+  user                  User            @relation("UserShares",    fields: [userId],    references: [id])
+
+  @@unique([sessionId, userId], name: "Share_sessionId_userId")
+}
 
  model RecoverySession {
    id              String   @id @default(cuid())
@@ -136,4 +156,11 @@ enum RecoveryStatus {
   PENDING
   DONE
   CANCELED
+}
+
+enum ShareStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  // при необходимости можно добавить и другие состояния
 }

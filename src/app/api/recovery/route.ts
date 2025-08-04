@@ -1,75 +1,97 @@
-// app/api/recovery/route.ts
+// src/app/api/recovery/route.ts
 
-import { NextResponse } from 'next/server';
-import { prisma }       from '@/lib/prisma';
-import { getServerSession }   from 'next-auth/next';
-import { authOptions }        from '@/app/api/auth/[...nextauth]/route';
-
+import { NextResponse }         from "next/server";
+import { prisma }               from "@/lib/prisma";
+import { getServerSession }     from "next-auth/next";
+import { authOptions }          from "@/app/api/auth/[...nextauth]/route";
+import { log }                  from "@/lib/logger";
 
 export async function POST(request: Request) {
-  // 1) Прочитаем и залогируем тело, чтобы убедиться в его форме
-  const body = await request.json();
-  console.log("POST /api/recovery body:", body);
+  // 1) Авторизация
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    log({ event: "recovery_unauthorized" });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-  // 2) Деструктурируем с проверкой
-  const shareSessionId = typeof body.shareSessionId === 'string'
-    ? body.shareSessionId
-    : null;
-  const shareholderIds = Array.isArray(body.shareholderIds)
-    ? body.shareholderIds as string[]
-    : [];
-
-  if (!shareSessionId || shareholderIds.length === 0) {
+  // 2) Читаем тело — нам нужен только shareSessionId
+  const { shareSessionId } = (await request.json()) as { shareSessionId?: string };
+  if (!shareSessionId) {
     return NextResponse.json(
-      { error: "Неверный запрос: нужен shareSessionId и непустой shareholderIds" },
+      { error: "Нужен shareSessionId" },
       { status: 400 }
     );
   }
 
-  // 3) Проверяем, что ShamirSession существует
-  const shamirSession = await prisma.shamirSession.findUnique({
+  // 3) Проверяем, что сессия разделения (VSS) существует и вы — её дилер
+  const sessionRec = await prisma.shamirSession.findUnique({
     where: { id: shareSessionId },
+    select: { id: true, dealerId: true },
   });
-  if (!shamirSession) {
+  if (!sessionRec) {
+    return NextResponse.json({ error: "Сессия не найдена" }, { status: 404 });
+  }
+  if (sessionRec.dealerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // 4) Собираем из Share все userId, кому мы когда-то отправили доли
+  const shares = await prisma.share.findMany({
+    where: { sessionId: shareSessionId },
+    select: { userId: true },
+  });
+  const shareholderIds = shares.map((s) => s.userId);
+  if (shareholderIds.length === 0) {
     return NextResponse.json(
-      { error: 'ShamirSession не найдена' },
-      { status: 404 }
+      { error: "В этой сессии нет ни одной доли" },
+      { status: 400 }
     );
   }
 
-  // 4) Создаём RecoverySession
+  // 5) Создаём RecoverySession и создаём все записи receipt
   const recovery = await prisma.recoverySession.create({
     data: {
-      dealerId:       shamirSession.dealerId,
-      shareSessionId: shamirSession.id,
+      dealerId:       sessionRec.dealerId,
+      shareSessionId: shareSessionId,
       receipts: {
         createMany: {
-          data: shareholderIds.map(userId => ({ shareholderId: userId })),
+          data: shareholderIds.map((userId) => ({ shareholderId: userId })),
         },
       },
-      // статус PENDING по умолчанию
     },
+  });
+
+  log({
+    event:      "recovery_started",
+    recoveryId: recovery.id,
+    shareSessionId,
+    participants: shareholderIds,
+    timestamp:  new Date().toISOString(),
   });
 
   return NextResponse.json({ recoveryId: recovery.id });
 }
 
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const role = url.searchParams.get('role');
+  const role = url.searchParams.get("role");
 
-  // --------------- запросы дольщика ---------------
-  if (role === 'shareholder') {
-    // 1) проверяем сессию
+  // --- shareholder: отдаём все запросы на отдачу доли этому пользователю ---
+  if (role === "shareholder") {
+    // 1) Авторизация
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const userId = session.user.id;
 
-    // 2) находим все ShareReceipt без ciphertext для этого пользователя
-    const recs = await prisma.shareReceipt.findMany({
-      where: { shareholderId: userId, ciphertext: undefined },
+    // 2) Берём все записи shareReceipt, где дилер запросил вашу долю
+    const pending = await prisma.shareReceipt.findMany({
+      where: {
+        shareholderId: userId,
+        ciphertext:    undefined,    // ещё не ваша ответка
+      },
       include: {
         recovery: {
           select: {
@@ -79,7 +101,7 @@ export async function GET(request: Request) {
               select: {
                 shares: {
                   where: { userId },
-                  select: { x: true, ciphertext: true },
+                  select: { x: true, ciphertext: true },  // Ориджинал от дилера
                 },
               },
             },
@@ -88,54 +110,63 @@ export async function GET(request: Request) {
       },
     });
 
-    // 3) мапим в ожидемый формат
-    const requests = recs.map(r => ({
-      id:         r.recovery.id,                          // recoveryId
-      dealerId:   r.recovery.dealerId,
-      x:          r.recovery.shareSession.shares[0].x,
-      ciphertext: r.recovery.shareSession.shares[0].ciphertext,
-    }));
+    // 3) Мапим на то, что ждёт клиент
+    const requests = pending.map((r) => {
+      const share = r.recovery.shareSession.shares[0];
+      return {
+        id:         r.recovery.id,       // recoverySession.id
+        dealerId:   r.recovery.dealerId,
+        x:          share.x,
+        ciphertext: share.ciphertext as number[], // вот реальный ciphertext
+      };
+    });
 
     return NextResponse.json({ requests });
   }
-  else if (role === 'dealer') {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const dealerId = session.user.id;
 
-    // Берём все ShamirSession, где я дилер
-    const sessions = await prisma.shamirSession.findMany({
-      where: { dealerId },
-      select: {
-        id: true,
-        threshold: true,
-        createdAt: true,
-        // ищем активные (не DONE) recovery
-        recoveries: {
-          where: { status: { not: "DONE" } },
-          select: { id: true, status: true },
-          take: 1
+if (role === "dealer") {
+  // 1) проверяем аутентификацию
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const dealerId = session.user.id;
+
+  // 2) берём все сессии разделения, которые создал дилер
+  const sessions = await prisma.shamirSession.findMany({
+    where: { dealerId },
+    select: {
+      id:        true,
+      threshold: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // 3) для каждой сессии считаем общее количество долей и вернувшиеся
+  const result = await Promise.all(
+    sessions.map(async (s) => {
+      const total = await prisma.share.count({
+        where: { sessionId: s.id },
+      });
+      const returned = await prisma.share.count({
+        where: {
+          sessionId: s.id,
+          ciphertext: { not: [] },  // массив уже заполнен
         },
-      },
-    });
-
-    // мапим так, что activeRecovery либо undefined, либо { id, status }
-    const result = sessions.map(s => ({
-      id: s.id,
-      threshold: s.threshold,
-      createdAt: s.createdAt,
-      activeRecovery: s.recoveries[0] || null,
-    }));
-
-    return NextResponse.json({ sessions: result });
-  };
-
-  // --------------- все прочие GET не разрешены ---------------
-  return NextResponse.json(
-    { error: 'Method Not Allowed' },
-    { status: 405 }
+      });
+      return {
+        sessionId: s.id,
+        createdAt: s.createdAt,
+        threshold: s.threshold,
+        total,
+        returned,
+      };
+    })
   );
-}
 
+  // 4) отдаем в поле `sessions`
+  return NextResponse.json({ sessions: result });
+}
+  return NextResponse.json({ error: "Method Not Allowed" }, { status: 405 });
+}

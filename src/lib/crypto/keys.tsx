@@ -36,15 +36,18 @@ export async function encryptWithPubkey(
     console.log("PUB-fingerprint:",
     await jwkFingerprint(jwkPub));
 
+  console.log('encryptWithPubkey after', share);
   const data = new TextEncoder().encode(share);
+  console.log('encryptWithPubkey after', data);
   const ct = await crypto.subtle.encrypt(
     { name: "RSA-OAEP"}, // важно указать hash, как при генерации
     publicKey,
     data
   );
-
+ console.log('encryptWithPubkey after2', ct);
   // Uint8Array → Base64
   const bytes = new Uint8Array(ct);
+  console.log('encryptWithPubkey after3', bytes);
   return btoa(String.fromCharCode(...bytes));
 }
 
@@ -56,8 +59,10 @@ export function base64ToUint8Array(b64: string): Uint8Array {
 
 export function decodeCiphertext(raw: unknown): Uint8Array {
   /* 1. Uint8Array / ArrayBuffer */
-  if (raw instanceof Uint8Array)  return raw;
+  if (raw instanceof Uint8Array) return raw;
   if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+
+  console.log(raw);
 
   /* 2. Node {type:'Buffer',data:[…]} */
   if (
@@ -89,33 +94,57 @@ export function decodeCiphertext(raw: unknown): Uint8Array {
     return decodeCiphertext(inner);
   }
 
-  /* 5a. Массив чисел/строк/bigint (0-255) */
+  /* 5. Массив чисел/строк/bigint (0-255) или Base64-символы */
   if (Array.isArray(raw)) {
-    // ⬇️  если все элементы — числа/строки-цифры
+    console.log('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffsadfsadfasdsadasdadSDFSDFDSDSVDSDSV')
+    // 5a. все элементы — числа/строки-цифры/bigint
     if (raw.every(v => typeof v === "number" || typeof v === "string" || typeof v === "bigint")) {
       const nums = raw.map(v => Number(v));
       if (nums.every(n => Number.isFinite(n) && n >= 0 && n <= 255)) {
         return Uint8Array.from(nums);
       }
     }
-
-    /* 5b. Массив строк-символов Base64 (Q, p, M, …) */
+    // 5b. массив строк-символов Base64 (Q, p, M, …)
     if (raw.every(v => typeof v === "string" && v.length === 1)) {
       return decodeCiphertext((raw as string[]).join(""));
     }
   }
 
-  /* 6. Строка Base64 / Base64-URL */
+  if (typeof raw === "string" && raw.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw);
+      return decodeCiphertext(parsed);
+    } catch {
+      // не JSON — идём дальше
+    }
+  }
+  
+  /* 6. Строка: проверка hex */
   if (typeof raw === "string") {
-    let b64 = raw.trim().replace(/-/g, "+").replace(/_/g, "/");
+    const s = raw.trim();
+    // hex: только 0-9a-f, чётная длина
+    if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0) {
+      const len = s.length / 2;
+      const out = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        out[i] = parseInt(s.substr(i * 2, 2), 16);
+      }
+      return out;
+    }
+    // иначе treat as Base64/Base64URL
+    let b64 = s.replace(/-/g, "+").replace(/_/g, "/");
     const pad = b64.length % 4;
     if (pad) b64 += "=".repeat(4 - pad);
-
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; ++i) out[i] = bin.charCodeAt(i);
-    return out;
+    try {
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    } catch {
+      throw new TypeError("Невозможно декодировать ciphertext: некорректный формат");
+    }
   }
 
+  console.error("Unsupported ciphertext format:", raw);
   throw new TypeError("ciphertext: unsupported type");
 }

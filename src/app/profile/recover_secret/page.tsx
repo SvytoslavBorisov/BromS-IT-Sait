@@ -34,17 +34,19 @@ export default function RecoverListPage() {
   if (loading) return <p>Загрузка сессий…</p>;
   if (error)   return <p className="text-red-500">Ошибка: {error}</p>;
 
+  console.log(sessions);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Восстановить секрет</h1>
       <ul className="space-y-4">
         {sessions.map((s) => (
           <li
-            key={s.id}
+            key={s.sessionId}
             className="p-4 border rounded flex justify-between items-center"
           >
             <div>
-              <p><b>Сессия:</b> {s.id}</p>
+              <p><b>Сессия:</b> {s.sessionId}</p>
               <p>
                 <b>Порог:</b> {s.threshold} &nbsp;
                 {s.activeRecovery
@@ -66,7 +68,7 @@ export default function RecoverListPage() {
                 </button>
               ) : (
                 <button
-                  onClick={() => router.push(`/profile/recover_secret/${s.id}`)}
+                  onClick={() => router.push(`/profile/recover_secret/${s.sessionId}`)}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   Начать восстановление

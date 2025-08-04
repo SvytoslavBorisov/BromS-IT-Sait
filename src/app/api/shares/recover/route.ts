@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
   const shamirSession = await prisma.shamirSession.findUnique({
     where: { id: sessionId },
-    select: { prime: true, threshold: true },
+    select: { p: true, threshold: true },
   });
   if (!shamirSession) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json({
-    prime:     shamirSession.prime,
+    prime:     shamirSession.p,
     threshold: shamirSession.threshold,
     shares,
   });

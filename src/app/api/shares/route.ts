@@ -1,10 +1,10 @@
-// app/api/shares/route.ts
+// src/app/api/shares/route.ts
 
-import { NextResponse }      from "next/server";
-import { getServerSession }  from "next-auth/next";
-import { authOptions }       from "@/app/api/auth/[...nextauth]/route";
-import { prisma }            from "@/lib/prisma";
-import { log }               from "@/lib/logger";
+import { NextResponse }     from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions }      from "@/app/api/auth/[...nextauth]/route";
+import { prisma }           from "@/lib/prisma";
+import { log }              from "@/lib/logger";
 
 export async function POST(request: Request) {
   // 1) Авторизация
@@ -14,55 +14,81 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 2) Парсим тело
-  const { prime, threshold, shares } = await request.json() as {
-    prime:     string;
+  // 2) Парсим тело VSS-параметров
+  const {
+    p,
+    q,
+    g,
+    commitments,
+    threshold,
+    shares,
+  } = (await request.json()) as {
+    p: string;
+    q: string;
+    g: string;
+    commitments: string[];
     threshold: number;
-    shares:    Array<{
-      recipientId: string;
-      x:           string;
-      ciphertext:  number[];
+    shares: Array<{
+      recipientId:         string;
+      x:                   string;
+      ciphertext:          number[];
+      status:              "ACTIVE" | "USED" | "EXPIRED";
+      comment:             string;
+      encryptionAlgorithm: string;
+      expiresAt:           string | null;
     }>;
   };
 
-  // 3) Создаём новую сессию разделения в БД
-  const shamirSession = await prisma.shamirSession.create({
+  // 3) Создаём новую VSS-сессию в БД
+  const vssSession = await prisma.shamirSession.create({
     data: {
-      dealerId:  session.user.id,
-      prime,
+      dealerId:   session.user.id,
+      p,
+      q,
+      g,
+      commitments,
       threshold,
     },
   });
 
   log({
-    event:      "shamir_session_created",
+    event:      "vss_session_created",
     dealerId:   session.user.id,
-    sessionId:  shamirSession.id,
-    prime,
+    sessionId:  vssSession.id,
+    p,
+    q,
+    g,
+    commitments,
     threshold,
     timestamp:  new Date().toISOString(),
   });
 
-  // 4) Сохраняем все доли, привязанные к этой сессии
+  // 4) Сохраняем все зашифрованные доли с новыми полями
   await prisma.share.createMany({
     data: shares.map((s) => ({
-      sessionId:  shamirSession.id,
-      userId:     s.recipientId,
-      x:          s.x,
-      ciphertext: s.ciphertext,  // Prisma Json — сохраняем Base64
+      sessionId:           vssSession.id,
+      userId:              s.recipientId,
+      x:                   s.x,
+      ciphertext:          s.ciphertext,            // Prisma JSON поддерживает массивы
+      status:              s.status,
+      comment:             s.comment,
+      encryptionAlgorithm: s.encryptionAlgorithm,
+      expiresAt:           s.expiresAt ? new Date(s.expiresAt) : null,
     })),
   });
 
-  // 5) Подробное логирование
+  // 5) Логируем каждую долю
   shares.forEach((s) =>
     log({
-      event:      "share_saved",
-      sessionId:  shamirSession.id,
+      event:      "vss_share_saved",
+      sessionId:  vssSession.id,
       recipient:  s.recipientId,
       x:          s.x,
+      status:     s.status,
+      comment:    s.comment,
       timestamp:  new Date().toISOString(),
     })
   );
 
-  return NextResponse.json({ ok: true, sessionId: shamirSession.id });
+  return NextResponse.json({ ok: true, sessionId: vssSession.id });
 }

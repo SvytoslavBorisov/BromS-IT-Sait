@@ -1,11 +1,11 @@
-// app/api/recovery/[id]/secret/route.ts
+// src/app/api/recovery/[id]/secret/route.ts
 
-import { NextResponse } from 'next/server';
-import { prisma }       from '@/lib/prisma';
+import { NextResponse } from "next/server";
+import { prisma }       from "@/lib/prisma";
 
 /**
  * GET /api/recovery/:id/secret
- * Ответ: { shares: { x: string, ciphertext: Json }[] }
+ * Ответ: { shares: { x: string, ciphertext: string }[] }
  */
 export async function GET(
   _req: Request,
@@ -13,44 +13,49 @@ export async function GET(
 ) {
   const { id: recoveryId } = await params;
 
-  // 1. Получаем RecoverySession вместе с порогом и всеми долями ShamirSession
   const recovery = await prisma.recoverySession.findUnique({
     where: { id: recoveryId },
     include: {
-      shareSession: {               // связь на модель ShamirSession
-        select: { shares: true, threshold: true },
+      shareSession: {
+        select: {
+          threshold: true,
+          shares: {
+            select: {
+              x:      true,
+              userId: true,
+            }
+          }
+        }
       },
-      receipts: true,               // ShareReceipt[]
+      receipts: {
+        where: { ciphertext: { not: undefined } },
+        select: { shareholderId: true, ciphertext: true },
+      },
     },
   });
 
   if (!recovery) {
-    return NextResponse.json(
-      { error: 'RecoverySession not found' },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "RecoverySession не найдена" }, { status: 404 });
   }
-
-  if (recovery.status !== 'DONE') {
+  if (recovery.status !== "DONE") {
     return NextResponse.json(
-      { error: 'Not enough receipts yet' },
+      { error: "Недостаточно ответов для восстановления" },
       { status: 409 }
     );
   }
 
-  // 2. Собираем только действительно полученные доли
-  const shares = recovery.receipts
-    .filter(r => r.ciphertext !== null)
-    .map(r => {
-      // Находим у ShamirSession нужную точку по shareholderId
-      const shareRec = recovery.shareSession.shares.find(
-        sh => sh.userId === r.shareholderId
-      );
-      return {
-        x:          shareRec!.x,
-        ciphertext: r.ciphertext!,
-      };
-    });
+  const shares = recovery.receipts.map((r) => {
+    const point = recovery.shareSession.shares.find(
+      (sh) => sh.userId === r.shareholderId
+    );
+    if (!point) {
+      throw new Error(`Не найдена исходная доля для пользователя ${r.shareholderId}`);
+    }
+    return {
+      x:          point.x,
+      ciphertext: r.ciphertext as string,
+    };
+  });
 
   return NextResponse.json({ shares });
 }

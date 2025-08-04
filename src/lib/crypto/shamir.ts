@@ -232,28 +232,48 @@ export function shareSecretVSS(
   commitments: bigint[];
   sharesList: [bigint, bigint][];
 } {
-  const secretInt = typeof secret === 'bigint'
-    ? secret
-    : BigInt('0x' + Buffer.from(secret).toString('hex')); 
-  if (threshold < 1 || shares < threshold) {
+    if (threshold < 1 || shares < threshold) {
     throw new Error('shares >= threshold >= 1');
   }
+
+  // 1) Преобразуем secret в bigint
+  let secretInt = typeof secret === 'bigint'
+    ? secret
+    : BigInt('0x' + Buffer.from(secret).toString('hex'));
+
+  // 2) Генерируем (или проверяем) безопасные простые p, q
   let _p = p;
   let _q = q;
   if (!_p || !_q) {
-    const safe = genSafePrime(bits || secretInt.toString(2).length + 1);
+    // ←– Здесь вместо простого genSafePrime(bits) делаем так:
+    const n_bits = secretInt.toString(2).length;
+    // +8 бит запаса, чтобы q > секрет
+    const safe = genSafePrime(n_bits + 8);
     _p = safe.p;
     _q = safe.q;
-  } else if (_p !== 2n * _q + 1n || !isPrime(_p) || !isPrime(_q)) {
-    throw new Error('Invalid p or q');
+  } else {
+    if (_p !== 2n * _q + 1n || !isPrime(_p) || !isPrime(_q)) {
+      throw new Error('Invalid p or q');
+    }
   }
+
+  // 3) Сводим секрет в Z_q (теперь q гарантированно > secretInt)
+  secretInt %= _q;
+
+  // 4) Строим случайный полином степени (threshold-1) в поле mod q
   const coeffs: bigint[] = [secretInt];
   for (let i = 1; i < threshold; i++) {
     coeffs.push(randBetween(_q!));
   }
+
+  // 5) Находим генератор группы порядка q
   const h = findGenerator(_p!, [2n, _q!]);
   const g = modPow(h, 2n, _p!);
+
+  // 6) Вычисляем обязательства C_j = g^{a_j} mod p
   const commitments = coeffs.map(a => modPow(g, a, _p!));
+
+  // 7) Генерируем sharesList: (x, y=f(x) mod q)
   const sharesList: [bigint, bigint][] = [];
   for (let i = 1; i <= shares; i++) {
     const x = BigInt(i);
@@ -263,9 +283,9 @@ export function shareSecretVSS(
     });
     sharesList.push([x, y]);
   }
+
   return { p: _p!, q: _q!, g, commitments, sharesList };
 }
-
 /**
  * Проверка одной доли Feldman VSS
  */
@@ -273,78 +293,52 @@ export function verifyShare(
   share: [bigint, bigint],
   p: bigint,
   g: bigint,
-  commitments: bigint[]
+  commitments: bigint[],
+  q: bigint
 ): boolean {
   const [x, y] = share;
-  let lhs = modPow(g, y, p);
+  const lhs = modPow(g, y, p);
+  console.log("verifyShare — x =", x, "y =", y);
+  console.log("lhs = g^y mod p =", lhs);
+
   let rhs = 1n;
   commitments.forEach((Cj, j) => {
-    rhs = (rhs * modPow(Cj, modPow(x, BigInt(j), p), p)) % p;
+    const exp = modPow(x, BigInt(j), q);
+    const term = modPow(Cj, exp, p);
+    console.log(`  C[${j}] = ${Cj}, x^${j} mod q = ${exp}, term = ${term}`);
+    rhs = (rhs * term) % p;
   });
+  console.log("rhs =", rhs);
+
   return lhs === rhs;
 }
 
+
 /**
- * Восстановление секрета из Feldman VSS
+ * Восстановление секрета из Feldman VSS (Лагранж)
  */
 export function reconstructSecretVSS(
   sharesArr: [bigint, bigint][],
   q: bigint
 ): bigint {
-  if (!sharesArr.length) throw new Error('Need at least one share');
+  if (sharesArr.length === 0) {
+    throw new Error('Need at least one share');
+  }
+
   let secret = 0n;
-  sharesArr.forEach(([xi, yi]) => {
+  for (const [xi, yi] of sharesArr) {
     let num = 1n;
     let den = 1n;
-    sharesArr.forEach(([xj]) => {
+    for (const [xj] of sharesArr) {
       if (xj !== xi) {
         num = (num * -xj) % q;
         den = (den * (xi - xj)) % q;
       }
-    });
+    }
     const li = (num * modInverse(den, q)) % q;
     secret = (secret + yi * li) % q;
-  });
-  return secret;
-}
-
-/**
- * Протокол Shamir без дилера (Ingemarsson–Simmons)
- */
-export function setupNoDealer(
-  ids: number[],
-  threshold: number,
-  prime?: bigint,
-  bits = 0
-): { prime: bigint; shares: [bigint, bigint][] } {
-  const n = ids.length;
-  if (threshold < 1 || threshold > n) {
-    throw new Error('threshold must satisfy 1 ≤ threshold ≤ n');
   }
-
-  let _prime = prime;
-  if (!_prime) {
-    _prime = shareSecret(0n, threshold, n, undefined, bits).prime;
-  }
-
-  // Сохраняем у каждого участника массив его точек
-  const participants = new Map<number, [bigint, bigint][]>();
-  for (const id of ids) {
-    const secret_i = randBetween(_prime);
-    const { points } = shareSecret(secret_i, threshold, n, _prime, bits);
-    participants.set(id, points);
-  }
-
-  // Аггрегируем доли по каждому j
-  const shares: [bigint, bigint][] = ids.map(j => {
-    const Bj = BigInt(j);
-    const sum = ids.reduce((acc, i) => {
-      const pts = participants.get(i)!;
-      const tup = pts.find(p => p[0] === Bj)!;
-      return (acc + tup[1]) % _prime!;
-    }, 0n);
-    return [Bj, sum];
-  });
-
-  return { prime: _prime, shares };
+  console.log('secret', secret,);
+  // приводим к положительному представлению
+  return (secret + q) % q;
 }

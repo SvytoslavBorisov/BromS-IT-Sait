@@ -1,43 +1,114 @@
+// src/app/profile/recover_secret/[sessionId]/page.tsx
+
 import DealerRecovery from "@/components/profile/DealerRecovery";
 import { prisma }      from "@/lib/prisma";
 
 export default async function RecoverPage({
   params,
 }: {
-  params: { sessionId: string };
+  params: Promise<{ sessionId: string }>;
 }) {
-  const { sessionId } = params;
+  // обязательно ждём params перед использованием
+  const { sessionId } = await params;
 
-  // 1) Загрузка данных напрямую из БД
-  const shamir = await prisma.shamirSession.findUnique({
-    where: { id: sessionId },
+  const recoverySession = await prisma.recoverySession.findMany({
+    where: { shareSessionId: sessionId },
     select: {
-      prime:     true,
-      threshold: true,
-      shares: {
-        select: { x: true, userId: true },
+      // Параметры самой RecoverySession
+      id:         true,
+      status:     true,
+      createdAt:  true,
+      finishedAt: true,
+
+      // Параметры связанной ShamirSession
+      shareSession: {
+        select: {
+          p:           true,
+          q:           true,
+          g:           true,
+          commitments: true,
+          threshold:   true,
+        }
       },
-    },
+
+      // Все поступившие квитанции (ShareReceipt) для этой сессии
+      receipts: {
+        select: {
+          id:           true,
+          shareholderId:true,
+          ciphertext:   true,
+          receivedAt:   true,
+        }
+      }
+    }
   });
 
-  if (!shamir) {
-    throw new Error("ShamirSession не найдена");
+  if (!recoverySession) {
+    console.log(`RecoverySession с id=${sessionId} не найдена`);
+
+      // 1) Считываем из БД VSS-параметры и зашифрованные доли
+    const shares_session = await prisma.shamirSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        p:           true,
+        q:           true,
+        g:           true,
+        commitments: true,
+        threshold:   true,
+        shares: {
+          select: {
+            x:          true,
+            userId:     true,
+            ciphertext: true,
+          },
+        },
+      },
+    });
+
+    if (!shares_session) {
+      throw new Error("Сессия восстановления не найдена");
+    }
+
+    // 2) Приводим строки к bigint и bigint[]
+    const p           = BigInt(shares_session.p);
+    const q           = BigInt(shares_session.q);
+    const g           = BigInt(shares_session.g);
+    const commitments = (shares_session.commitments as string[])
+      .map((c) => BigInt(c));
+    const threshold   = shares_session.threshold;
+
+    // 3) Форматируем список долей для клиента
+    const shares = shares_session.shares.map((s) => ({
+      x:          s.x,
+      userId:     s.userId,
+      ciphertext: s.ciphertext, 
+    }));
+
+    const sharesTyped = shares.map((s) => ({
+      x: s.x,
+      userId: s.userId,
+      ciphertext: s.ciphertext as number[],
+    }));
+
+    // 4) Рендерим заголовок и клиентский компонент DealerRecovery
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-semibold mb-4">
+          Восстановление секрета
+        </h1>
+        <DealerRecovery
+          sessionId={sessionId}
+          p={p}
+          q={q}
+          g={g}
+          commitments={commitments}
+          threshold={threshold}
+          shares={sharesTyped}
+        />
+      </div>
+    );
   }
-
-  const shares    = shamir.shares.map(s => ({ x: s.x, userId: s.userId }));
-  const threshold = shamir.threshold;
-  const prime     = BigInt(shamir.prime);
-
-  // 2) Рендер
-  return (
-    <div>
-      <h1 className="text-2xl font-semibold mb-4">Восстановление секрета</h1>
-      <DealerRecovery
-        sessionId={sessionId}
-        shares={shares}
-        threshold={threshold}
-        prime={prime}
-      />
-    </div>
-  );
+  else {
+    
+  }
 }

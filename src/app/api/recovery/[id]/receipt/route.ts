@@ -38,6 +38,7 @@ export async function PUT(
     );
   }
   const { ciphertext } = body;
+
   if (typeof ciphertext !== "string") {
     return NextResponse.json(
       { error: "Missing or invalid ciphertext" },
