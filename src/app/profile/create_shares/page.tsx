@@ -26,6 +26,17 @@ export default function CreateShares() {
       .then((r) => r.json())
       .then(setParticipants)
       .catch(console.error);
+
+      const res = fetch('http://localhost:3000/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payload: 'test-message',
+          signature: '67622fb1399b3dc67c94e8e8cceb35ba2c89cd8b2bf9b5ef87521f92464b4fca'
+        })
+      });
+      console.log('asdasd', res);
+
   }, []);
 
   const toggle = (id: string) => {

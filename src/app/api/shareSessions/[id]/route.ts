@@ -3,6 +3,7 @@ import { prisma }       from '@/lib/prisma';
 import { getServerSession }  from "next-auth/next";
 import { authOptions }       from "@/app/api/auth/[...nextauth]/route";
 
+
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -40,9 +41,8 @@ export async function DELETE(
     });
 
     // 2) Удаляем сам RecoverySession
-
-
     return NextResponse.json({ ok: true });
+
   } catch (e: any) {
     console.error("DELETE /api/shareSession/[id] error:", e);
     return NextResponse.json(

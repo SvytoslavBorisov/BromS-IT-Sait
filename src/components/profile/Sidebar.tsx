@@ -1,21 +1,31 @@
 "use client";
 
-import { Dispatch, SetStateAction } from "react";
+import { ReactNode } from "react";
+
+// Определяем тип вкладок
+export type Tab =
+  | "profile"
+  | "keys"
+  | "all_keys"
+  | "process"
+  | "security"
+  | "settings";
 
 interface SidebarProps {
-  activeTab: "profile" | "keys" | "all_keys" |"process" | "security" | "settings" ;
-  setActiveTab: Dispatch<SetStateAction<"profile" | "keys" |  "all_keys" | "process" | "security" | "settings">>;
+  activeTab: Tab;
+  // принимаем колбэк, который просто получает новую вкладку
+  setActiveTab: (tab: Tab) => void;
 }
 
 export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
-  const tabs = [
+  const tabs: { id: Tab; label: string }[] = [
     { id: "profile", label: "Профиль" },
     { id: "keys", label: "Ваши ключи" },
     { id: "all_keys", label: "Все ключи" },
     { id: "process", label: "Процессы" },
     { id: "security", label: "Журнал безопасности" },
     { id: "settings", label: "Настройки" },
-  ] as const;
+  ];
 
   return (
     <aside className="w-64 bg-white shadow-md">

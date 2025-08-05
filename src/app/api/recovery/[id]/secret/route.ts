@@ -28,7 +28,7 @@ export async function GET(
         }
       },
       receipts: {
-        where: { ciphertext: { not: undefined } },
+        where: { ciphertext: { not: [] as any } },
         select: { shareholderId: true, ciphertext: true },
       },
     },

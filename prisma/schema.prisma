@@ -63,6 +63,8 @@ model User {
 
   recoverySessions RecoverySession[] @relation("RecoveryDealer")
   shareReceipts    ShareReceipt[]    @relation("ReceiptShareholder")
+  notification    Notification[]    @relation("userNotification")
+  sendReceipts    ShareReceipt[]    @relation("sendReceipts")
 
   accounts       Account[]
   sessions       Session[]
@@ -71,6 +73,7 @@ model User {
   manager        User?              @relation("UserHierarchy", fields: [managerId], references: [id])
   reports        User[]             @relation("UserHierarchy")
 }
+
 model VerificationToken {
   identifier String
   token      String   @unique
@@ -83,12 +86,14 @@ model VerificationToken {
 model ShamirSession {
   id          String    @id @default(cuid())
   dealerId    String
+  title       String
   p           String    @default("")        // пустая строка
   q           String    @default("")
   g           String    @default("")
   commitments Json      @default("[]")      // пустой JSON-массив
   threshold   Int
   createdAt   DateTime  @default(now())
+  status      String    @default("")
 
   shares      Share[]   @relation("SessionShares")
   recoveries  RecoverySession[]
@@ -134,6 +139,7 @@ model Share {
    shareSessionId  String
    shareSession    ShamirSession @relation(fields:[shareSessionId], references:[id])
 
+   comment     String
    status      RecoveryStatus @default(PENDING)
    createdAt   DateTime       @default(now())
    finishedAt  DateTime?
@@ -152,8 +158,12 @@ model ShareReceipt {
   shareSessionId String  
   share          Share           @relation(fields: [shareSessionId, shareholderId], references: [sessionId, userId])
 
-  ciphertext Json @default("[]")
-  receivedAt DateTime @default(now())
+  status         String
+  senderId       String  
+  sender         User           @relation("sendReceipts", fields: [senderId], references: [id])
+
+  ciphertext     Json @default("[]")
+  receivedAt     DateTime @default(now())
 }
 
 model Notification {
@@ -164,7 +174,7 @@ model Notification {
   isRead      Boolean   @default(false)
   createdAt   DateTime  @default(now())
 
-  user        User      @relation(fields: [userId], references: [id])
+  user        User      @relation("userNotification", fields: [userId], references: [id])
 }
 
 enum RecoveryStatus {

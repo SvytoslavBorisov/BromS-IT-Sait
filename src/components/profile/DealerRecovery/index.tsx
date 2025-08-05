@@ -26,6 +26,7 @@ export interface DealerRecoveryProps {
   commitments:    bigint[];
   threshold:      number;
   shares:         VSSShare[];
+  statusRecovery: boolean;
 }
 
 export default function DealerRecovery(props: DealerRecoveryProps) {

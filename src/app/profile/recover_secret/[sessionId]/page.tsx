@@ -33,6 +33,11 @@ export default async function RecoverPage({
 
       // Все поступившие квитанции (ShareReceipt) для этой сессии
       receipts: {
+        where: {
+          ciphertext: {
+            not: [] as any
+          },
+        },
         select: {
           id:           true,
           shareholderId:true,
@@ -107,6 +112,7 @@ export default async function RecoverPage({
           commitments={commitments}
           threshold={threshold}
           shares={sharesTyped}
+          statusRecovery={false}
         />
       </div>
     );
@@ -125,6 +131,8 @@ export default async function RecoverPage({
       ciphertext: r.ciphertext as number[],
     }));
 
+    console.log('ВСЁ РАБОТАЕТ', sharesTyped);
+
     return (
       <div className="p-6">
         <h1 className="text-2xl font-semibold mb-4">
@@ -138,6 +146,7 @@ export default async function RecoverPage({
           commitments={commitments}
           threshold={threshold}
           shares={sharesTyped}
+          statusRecovery={true}
         />
       </div>
     );

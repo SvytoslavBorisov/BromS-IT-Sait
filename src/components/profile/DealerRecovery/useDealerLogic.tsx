@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { decodeCiphertext }      from "@/lib/crypto/keys";
 import {
   shareSecretVSS,
@@ -12,7 +12,7 @@ import type { DealerRecoveryProps, IncomingShare } from "./types";
 
 export function useDealerLogic(
   {
-    sessionId, p, q, g, commitments, threshold
+    sessionId, p, q, g, commitments, threshold, shares, statusRecovery
   }: DealerRecoveryProps,
   privKeyRef: React.RefObject<CryptoKey | null>
 ) {
@@ -29,7 +29,7 @@ export function useDealerLogic(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shareSessionId: sessionId, shareholderIds: [] }),
-      });
+      }); 
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || res.statusText);
       setRecoveryId(json.recoveryId);
@@ -104,6 +104,20 @@ export function useDealerLogic(
       setError(e.message);
     }
   }, [recoveryId, p, q, g, commitments, threshold, privKeyRef]);
+
+  // **1. При старте компонента, если статус восстановления уже true, сразу вызываем start()**
+  useEffect(() => {
+    if (statusRecovery && !recoveryId) {
+      start();
+    }
+  }, [statusRecovery, recoveryId, start]);
+
+  // **2. Как только получен recoveryId, сразу делаем первый checkStatus() и далее можно по таймеру**
+  useEffect(() => {
+    if (!recoveryId) return;
+    checkStatus();
+
+  }, [recoveryId, checkStatus]);
 
   return {
     recoveryId,

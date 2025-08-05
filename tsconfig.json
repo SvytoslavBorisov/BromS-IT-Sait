@@ -18,12 +18,14 @@
         "name": "next"
       }
     ],
+    "typeRoots": ["./src/types", "./node_modules/@types"],
     "paths": {
       "@/*": ["./src/*"],
       "@bromsit/crypto-core": ["./packages/crypto-core/src"],
       "@bromsit/crypto-core/*": ["./packages/crypto-core/src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "./packages/crypto-core/src"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "./packages/crypto-core/src", "src/types"," __tests__/**/*.ts",
+    "**/*.test.ts"],
   "exclude": ["node_modules"],
 }

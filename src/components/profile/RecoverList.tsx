@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import RecoverSecret from "./RecoverSecret";
+import SharingSessionList from "./SharingSessionList";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardContent } from "@/components/ui/cards";
 import { Button } from "@/components/ui/button";
@@ -40,11 +41,20 @@ export default function RecoverList() {
   }
 
   return (
-    <Card>
-      <CardHeader title="Выберите сессию для восстановления" />
-        <CardContent>
-          {<RecoverSecret />}
-        </CardContent>
-    </Card>
+    <div>
+      <Card>
+        <CardHeader title="Все разделенные секреты" />
+          <CardContent>
+            {<SharingSessionList />}
+          </CardContent>
+      </Card>
+      <Card>
+        <CardHeader title="Выберите сессию для восстановления" />
+          <CardContent>
+            {<RecoverSecret />}
+          </CardContent>
+      </Card>
+    </div>
+
   );
 }

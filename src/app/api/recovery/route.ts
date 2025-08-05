@@ -5,6 +5,7 @@ import { prisma }               from "@/lib/prisma";
 import { getServerSession }     from "next-auth/next";
 import { authOptions }          from "@/app/api/auth/[...nextauth]/route";
 import { log }                  from "@/lib/logger";
+import { notificationEmitter } from '@/lib/events';
 
 export async function POST(request: Request) {
 
@@ -73,13 +74,29 @@ export async function POST(request: Request) {
     },
   });
   
-  const receipts = await prisma.shareReceipt.createMany({
+  await prisma.shareReceipt.createMany({
     data: shareholderIds.map((userId) => ({
       recoveryId:     recovery.id,     // связываем с только что созданной сессией
       shareholderId:  userId,          // каждый из переданных идентификаторов
-      shareSessionId,                  // если в модели оно есть
+      shareSessionId,
+      status: 'AWAIT',
+      senderId: session?.user.id                 // если в модели оно есть
     })),
-});
+  });
+
+  // await Promise.all(
+  //   shareholderIds.map(async (userId) => {
+  //     const notif = await prisma.notification.create({
+  //       data: {
+  //         userId,
+  //         type: 'recover_secret',
+  //         payload: { shareSessionId },
+  //       },
+  //     });
+
+  //     notificationEmitter.emit(userId, notif);
+  //   })
+  // );
 
   log({
     event:      "recovery_started",
@@ -105,15 +122,18 @@ export async function GET(request: Request) {
     }
     const userId = session.user.id;
 
-    // 2) Берём все записи shareReceipt, где дилер запросил вашу долю
     const pending = await prisma.shareReceipt.findMany({
       where: {
         shareholderId: userId,
         ciphertext: {
-          equals: null as any   // приводим к JsonValue, чтобы TS не ругался
+          equals: [] as any,  // приведение к JsonValue
         },
       },
-      include: {
+      select: {
+        id: true,
+        shareholderId: true,
+        status: true,     // ← вот оно, поле статуса из shareReceipt
+        ciphertext: true, // если нужно
         recovery: {
           select: {
             id: true,
@@ -122,7 +142,7 @@ export async function GET(request: Request) {
               select: {
                 shares: {
                   where: { userId },
-                  select: { x: true, ciphertext: true },  // Ориджинал от дилера
+                  select: { x: true, ciphertext: true },
                 },
               },
             },
@@ -130,7 +150,6 @@ export async function GET(request: Request) {
         },
       },
     });
-
     console.log(pending);
 
     // 3) Мапим на то, что ждёт клиент

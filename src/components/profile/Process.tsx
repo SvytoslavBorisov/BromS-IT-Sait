@@ -13,6 +13,7 @@ interface ShareRequest {
   id:         string;   // recoveryId
   x:          string;   // координата
   dealerId:   string;
+  status:     string
   ciphertext: number[]; // массив чисел, как возвращает JSON
 }
 
@@ -127,7 +128,7 @@ export default function ProfileProcesses() {
           {error   && <p className="text-red-500">Ошибка: {error}</p>}
 
           {!loading && !error && (
-            <ScrollArea className="h-48">
+            <ScrollArea className="h-68">
               <ul className="space-y-3">
                 {requests.length === 0 ? (
                   <li>Нет активных запросов</li>
@@ -141,6 +142,9 @@ export default function ProfileProcesses() {
                         <p className="font-medium">
                           Дилер {req.dealerId} запрашивает вашу долю x={req.x}
                         </p>
+                      <p className="font-medium">
+                          Дилер {req.status} запрашивает вашу долю x={req.x}
+                        </p>              
                       </div>
                       <Button onClick={() => handleGive(req)}>
                         Отдать долю

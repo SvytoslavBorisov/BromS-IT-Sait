@@ -1,0 +1,39 @@
+<section class="relative w-full h-full overflow-hidden shadow-lg bg-[rgb(5,5,5)]">
+  <!-- Фоновое изображение -->
+  <img
+    src="glinda_bg.webp"
+    alt="GlInda"
+    class="absolute inset-0 w-full h-full object-cover object-top"
+  />
+
+  <!-- Мобилки: вверх, десктоп: вправо -->
+
+  <div class="absolute inset-0 bg-gradient-to-t md:bg-gradient-to-r from-transparent from-90% md:from-transparent  md:from-20% to-[rgb(5,5,5)]"></div>
+  <div class="absolute inset-0 md:bg-gradient-to-l md:from-transparent  md:from-40% md:to-[rgb(5,5,5)]"></div>
+
+  <!-- Десктопный градиент: слева направо -->
+  <div
+    class="z-4 absolute inset-0 bg-gradient-to-r from-transparent from-98% to-[rgb(5,5,5)] hidden md:block"
+  ></div>
+
+  <div
+    class="z-4 absolute inset-0 bg-gradient-to-t from-transparent from-98% to-[rgb(255,255,255)] hidden md:block"
+  ></div>
+
+  <div
+    class="z-4 absolute inset-0 bg-gradient-to-b from-transparent from-98% to-[rgb(255,255,255)] hidden md:block"
+  ></div>
+
+  <!-- Поле для текста и ссылки -->
+  <div class="z-3 absolute bottom-0 left-0 w-full bg-black/50 p-6">
+    <h2 class="text-2xl font-bold mb-2 text-white">GlInda</h2>
+    <p class="mb-4 text-white">Справочник по правильному питанию</p>
+    <!-- Ссылка-параграф: z-30 -->
+    <p
+      onclick="window.open('https://www.rustore.ru/catalog/app/ru.openbiz64.glinda', '_blank')"
+      class="relative z-4 cursor-pointer inline-block bg-white/20 hover:bg-white/30 rounded px-4 py-2 text-white"
+    >
+      Скачать в RuStore
+    </p>
+  </div>
+</section>

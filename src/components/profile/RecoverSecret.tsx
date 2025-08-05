@@ -7,9 +7,10 @@ interface SessionInfo {
   id: string;
   threshold: number;
   createdAt: string;
-  activeRecovery: { id: string; status: string } | null;
-  creatorId:      string;
+  status: string;
+  dealerId:      string;
   recoveryStatus: string;
+  shareSessionId: string;
 }
 
 
@@ -22,9 +23,15 @@ export default function RecoverSecret()  {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/recovery?role=dealer");
+        const res = await fetch("/api/recoverSessions");
+
+        console.log('res_recover', res);
+
         if (!res.ok) throw new Error("Не удалось загрузить сессии");
-        const { sessions } = await res.json();
+        const sessions = await res.json();
+
+        console.log('res_recover_sessions', sessions);
+
         setSessions(sessions);
       } catch (e: any) {
         setError(e.message);
@@ -36,7 +43,7 @@ export default function RecoverSecret()  {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/shareSessions/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/recoverSessions/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Не удалось удалить сессию");
       // Если всё ок, обновляем стейт — убираем удалённую сессию
       setSessions(prev => prev.filter(s => s.id !== id));
@@ -61,12 +68,10 @@ export default function RecoverSecret()  {
           >
             <div>
               <p><b>Сессия:</b> {s.id}</p>
-              <p><b>Создатель:</b> {s.creatorId}</p>
-              <p><b>Статус:</b> {s.recoveryStatus}</p>
-              <p>
-                <b>Порог:</b> {s.threshold} &nbsp;
-                {s.activeRecovery
-                  ? <span className="text-yellow-600">(восстановление {s.activeRecovery.status})</span>
+              <p><b>Создатель:</b> {s.dealerId}</p>
+              <p><b>Статус:</b>
+                {s.status
+                  ? <span className="text-yellow-600"> (восстановление {s.status})</span>
                   : null
                 }
               </p>
@@ -84,7 +89,7 @@ export default function RecoverSecret()  {
                 </button>
               ) : (
                 <button
-                  onClick={() => router.push(`/profile/recover_secret/${s.id}`)}
+                  onClick={() => router.push(`/profile/recover_secret/${s.shareSessionId}`)}
                   className="px-4 py-2 bg-blue-400 text-white rounded hover:bg-blue-500"
                 >
                   Начать восстановление
