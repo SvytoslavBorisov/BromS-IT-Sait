@@ -137,7 +137,7 @@ model Share {
 
    shareSessionId  String
    shareSession    ShamirSession @relation(fields:[shareSessionId], references:[id])
-   
+
    status      RecoveryStatus @default(PENDING)
    createdAt   DateTime       @default(now())
    finishedAt  DateTime?
@@ -156,6 +156,7 @@ model ShareReceipt {
   shareSessionId String  
   share          Share           @relation(fields: [shareSessionId, shareholderId], references: [sessionId, userId])
 
+  status         String
   senderId       String  
   sender         User           @relation("sendReceipts", fields: [senderId], references: [id])
 
