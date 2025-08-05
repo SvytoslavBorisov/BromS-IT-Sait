@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getServerSession }     from "next-auth/next";
-import { authOptions }          from "@/app/api/auth/[...nextauth]/route";
+import { authOptions }       from "@/lib/auth";
 import { NextResponse }         from "next/server";
 
 export const GET = async (req: NextRequest) => {

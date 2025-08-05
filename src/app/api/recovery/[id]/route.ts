@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma }       from '@/lib/prisma';
 import { getServerSession }  from "next-auth/next";
-import { authOptions }       from "@/app/api/auth/[...nextauth]/route";
+import { authOptions }       from "@/lib/auth";
 
 export async function DELETE(
   request: Request,
@@ -47,7 +47,6 @@ export async function GET(
     where: { id: sessionId },
     select: {
       dealerId:  true,
-      prime:     true,
       threshold: true,
       shares: {
         select: { x: true, userId: true, ciphertext: true },
@@ -62,8 +61,6 @@ export async function GET(
   }
 
   return NextResponse.json({
-    prime:     shamir.prime,
     threshold: shamir.threshold,
-    shares:    shamir.shares,
   });
 }
