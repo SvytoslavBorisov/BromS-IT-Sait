@@ -137,8 +137,7 @@ model Share {
 
    shareSessionId  String
    shareSession    ShamirSession @relation(fields:[shareSessionId], references:[id])
-
-   comment     String
+   
    status      RecoveryStatus @default(PENDING)
    createdAt   DateTime       @default(now())
    finishedAt  DateTime?

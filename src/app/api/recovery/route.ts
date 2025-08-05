@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   const existing = await prisma.recoverySession.findFirst({
     where: {
       shareSessionId: shareSessionId,
-      dealerId:       sessionRec.dealerId
+      dealerId:       sessionRec.dealerId,
     }
   });
   if (existing) {
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   const recovery = await prisma.recoverySession.create({
     data: {
       dealerId:       sessionRec.dealerId,
-      shareSessionId: shareSessionId,
+      shareSessionId: shareSessionId
     },
   });
   
