@@ -1,13 +1,14 @@
 // src/app/api/auth/[...nextauth]/route.ts
-export const runtime = 'nodejs';
 
-import NextAuth from "next-auth/next";
+export const runtime = "nodejs";
+
+import NextAuth from "next-auth";
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
-import { log } from "@/lib/logger"; 
+import { log } from "@/lib/logger";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -23,33 +24,31 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
-        if (!user) {
-          return null;
-        }
-        if (!user.passwordHash) {
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        });
+        if (!user || !user.passwordHash) {
           return null;
         }
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
-
-        if (valid) {
-          log({ event: "auth_success", userId: user.id, email: user.email });
-          return { id: user.id, email: user.email, name: user.name };
-        } else {
+        if (!valid) {
           log({ event: "auth_failure", email: credentials.email });
           return null;
         }
+
+        log({ event: "auth_success", userId: user.id, email: user.email });
+        return { id: user.id, email: user.email, name: user.name };
       },
     }),
   ],
   session: { strategy: "jwt" },
   pages: {
-    signIn: "/auth",    // ваша страница с формой логина
+    signIn: "/auth/login",    // ваша страница логина
   },
   callbacks: {
     async redirect({ baseUrl }) {
-      return `${baseUrl}/profile`;  // после логина идём в профиль
+      return `${baseUrl}/profile`;
     },
     async session({ session, token }) {
       session.user = { ...session.user, id: token.sub! };
@@ -57,8 +56,8 @@ export const authOptions: NextAuthOptions = {
     },
   },
   secret: process.env.NEXTAUTH_SECRET!,
-  // НЕ НАДО менять path куки, пусть будет по умолчанию "/"
 };
 
 const handler = NextAuth(authOptions);
+
 export { handler as GET, handler as POST };
