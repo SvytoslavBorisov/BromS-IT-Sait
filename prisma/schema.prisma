@@ -86,7 +86,6 @@ model VerificationToken {
 model ShamirSession {
   id          String    @id @default(cuid())
   dealerId    String
-  title       String
   p           String    @default("")        // пустая строка
   q           String    @default("")
   g           String    @default("")
@@ -158,7 +157,6 @@ model ShareReceipt {
   shareSessionId String  
   share          Share           @relation(fields: [shareSessionId, shareholderId], references: [sessionId, userId])
 
-  status         String
   senderId       String  
   sender         User           @relation("sendReceipts", fields: [senderId], references: [id])
 
