@@ -4,13 +4,8 @@ import { getServerSession }  from "next-auth/next";
 import { authOptions }       from "@/lib/auth";
 
 
-export async function GET(request: Request) {
-    const url = new URL(request.url);
-    const id = url.searchParams.get("id");
-    if (!id) {
-        return NextResponse.json({ error: "Missing id" }, { status: 400 });
-    }
-    
+export async function GET() {
+
     const session = await getServerSession(authOptions);
     if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
