@@ -27,11 +27,6 @@ const geistMono = Geist_Mono({
 });
 
 
-export const metadata = {
-  title: 'Мой сайт',
-  description: 'Описание',
-}
-
 export default function MainLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
