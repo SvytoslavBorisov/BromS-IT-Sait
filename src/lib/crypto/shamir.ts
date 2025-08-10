@@ -296,6 +296,7 @@ export function verifyShare(
   commitments: bigint[],
   q: bigint
 ): boolean {
+  
   const [x, y] = share;
   const lhs = modPow(g, y, p);
   console.log("verifyShare — x =", x, "y =", y);

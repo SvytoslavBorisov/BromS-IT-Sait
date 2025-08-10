@@ -26,6 +26,15 @@ export async function DELETE(
       where: { recoveryId: res?.id },
     });
       
+    await prisma.asymmetricKey.deleteMany({
+      where: { privateKeySharingId: res?.id },
+    });
+
+    await prisma.documentSignSession.deleteMany({
+      where: { recoveryId: res?.id },
+    });
+
+
     await prisma.recoverySession.deleteMany({
       where: { id: res?.id },
     });

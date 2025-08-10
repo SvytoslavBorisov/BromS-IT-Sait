@@ -89,19 +89,24 @@ export async function PUT(
 
   const receivedCount = recovery.receipts.filter(r => r.ciphertext !== null).length;
 
-  console.log('receivedCount', receivedCount, recovery.shareSession.threshold);
-
   if (
     receivedCount >= recovery.shareSession.threshold &&
     recovery.status !== "DONE"
   ) {
-    await prisma.recoverySession.update({
-      where: { id: recoveryId },
-      data: {
-        status:     "DONE",
-        finishedAt: new Date(),
-      },
-    });
+
+  await prisma.$transaction([
+      prisma.recoverySession.update({
+        where: { id: recoveryId },
+        data: {
+          status:     "DONE",
+          finishedAt: new Date(),
+        },
+      }),
+      prisma.documentSignSession.updateMany({
+        where: { recoveryId: recoveryId },
+        data:  { status: "DONE" },
+      }),
+    ]);
   }
 
   // 6) Return updated count

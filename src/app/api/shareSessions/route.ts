@@ -62,6 +62,7 @@ export async function GET() {
     },
     select: {
         id: true,
+        title: true,
         dealerId: true,
         p: true,
         q: true,
@@ -89,7 +90,6 @@ export async function GET() {
     // orderBy: { createdAt: "desc" },  // если их несколько, берём последнюю
     // });
 
-    console.log('mySessions', mySessions);
     if (!mySessions) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

@@ -33,7 +33,6 @@ export async function GET() {
     },
     });
 
-    console.log('mySessions', mySessions);
     if (!mySessions) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

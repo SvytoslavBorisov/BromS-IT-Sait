@@ -1,27 +1,29 @@
 // src/app/api/recovery/route.ts
 
-import { NextResponse }         from "next/server";
+import { NextRequest, NextResponse }         from "next/server";
 import { prisma }               from "@/lib/prisma";
 import { getServerSession }     from "next-auth/next";
 import { authOptions }       from "@/lib/auth";
 import { log }                  from "@/lib/logger";
-import { notificationEmitter } from '@/lib/events';
+import { getToken } from "next-auth/jwt";
 
-export async function POST(request: Request) {
 
-  console.log('Я тут');
-
-  // 1) Авторизация
+export async function POST(req: NextRequest) {
+  // 4) Попробуем getServerSession
   const session = await getServerSession(authOptions);
+
+  // 5) Если ни токен, ни сессия не работают — сразу выходим
   if (!session?.user) {
-    log({ event: "recovery_unauthorized" });
+    console.log({ event: "recovery_unauthorized" });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  console.log('Я тут');
-  
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Неавторизован" }, { status: 401 });
+  }
+
   // 2) Читаем тело — нам нужен только shareSessionId
-  const { shareSessionId } = (await request.json()) as { shareSessionId?: string };
+  const { shareSessionId } = (await req.json()) as { shareSessionId?: string };
   if (!shareSessionId) {
     return NextResponse.json(
       { error: "Нужен shareSessionId" },
@@ -40,8 +42,6 @@ export async function POST(request: Request) {
   if (sessionRec.dealerId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-
-  console.log('Я тут');
 
   // 4) Собираем из Share все userId, кому мы когда-то отправили доли
   const shares = await prisma.share.findMany({
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
   if (existing) {
       return NextResponse.json({ recoveryId: existing.id });
   }
+
   // 5) Создаём RecoverySession и создаём все записи receipt
   // src/app/api/recovery/route.ts (POST)
   const recovery = await prisma.recoverySession.create({
@@ -84,20 +85,6 @@ export async function POST(request: Request) {
     })),
   });
 
-  // await Promise.all(
-  //   shareholderIds.map(async (userId) => {
-  //     const notif = await prisma.notification.create({
-  //       data: {
-  //         userId,
-  //         type: 'recover_secret',
-  //         payload: { shareSessionId },
-  //       },
-  //     });
-
-  //     notificationEmitter.emit(userId, notif);
-  //   })
-  // );
-
   log({
     event:      "recovery_started",
     recoveryId: recovery.id,
@@ -108,6 +95,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ recoveryId: recovery.id });
 }
+
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

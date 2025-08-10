@@ -6,12 +6,15 @@ import { shareSecretVSS } from "@/lib/crypto/shamir";
 import { encryptWithPubkey } from "@/lib/crypto/keys";
 import { Card, CardHeader, CardContent } from "@/components/ui/cards";
 import { Button } from "@/components/ui/button";
+import { generateGostKeyPair } from "@/lib/crypto/gost3410"
 
 interface Participant {
   id: string;
   name: string;
   publicKey: JsonWebKey;
 }
+ 
+type FileType = 'CUSTOM' | 'ASYMMETRIC';
 
 export default function CreateShares() {
   const [secret, setSecret] = useState("");
@@ -19,24 +22,15 @@ export default function CreateShares() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [threshold, setThreshold] = useState(2);
   const [comment, setComment] = useState("");
+  const [title, setTitle] = useState("Разделение");
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
-
+  const [type, setType] = useState<FileType>('CUSTOM');
+  
   useEffect(() => {
     fetch("/api/participants", { cache: "no-store" })
       .then((r) => r.json())
       .then(setParticipants)
       .catch(console.error);
-
-      const res = fetch('http://localhost:3000/api/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payload: 'test-message',
-          signature: '67622fb1399b3dc67c94e8e8cceb35ba2c89cd8b2bf9b5ef87521f92464b4fca'
-        })
-      });
-      console.log('asdasd', res);
-
   }, []);
 
   const toggle = (id: string) => {
@@ -58,46 +52,115 @@ export default function CreateShares() {
   const handleCreate = async () => {
     if (!secret || selected.size < threshold) return;
 
-    // 1) Генерируем VSS-доли с коммитментами
-    const { p, q, g, commitments, sharesList } = shareSecretVSS(
-      new TextEncoder().encode(secret),
-      threshold,
-      selected.size
-    );
-
-    // 2) Шифруем каждую y-долю публичным ключом получателя
-    const payload = await Promise.all(
-      Array.from(selected).map(async (recipientId, idx) => {
-        const x = sharesList[idx][0].toString();
-        const y = sharesList[idx][1].toString();
-        const part = participants.find((p) => p.id === recipientId)!;
-        const ct = await encryptWithPubkey(y, part.publicKey);
-
-        return {
-          recipientId,
-          x,
-          ciphertext: Array.from(ct),
-          status: "ACTIVE",
-          comment,
-          encryptionAlgorithm: "RSA-OAEP-SHA256",
-          expiresAt, // ISO string or null
-        };
-      })
-    );
-
-    // 3) Отправляем на сервер полный VSS-пакет:
-    await fetch("/api/shares", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        p: p.toString(),
-        q: q.toString(),
-        g: g.toString(),
+    if (type === 'CUSTOM') {
+      // 1) Генерируем VSS-доли с коммитментами
+      const { p, q, g, commitments, sharesList } = shareSecretVSS(
+        new TextEncoder().encode(secret),
         threshold,
-        commitments: commitments.map((c) => c.toString()),
-        shares: payload,
-      }),
-    });
+        selected.size
+      );
+
+      // 2) Шифруем каждую y-долю публичным ключом получателя
+      const payload = await Promise.all(
+        Array.from(selected).map(async (recipientId, idx) => {
+          const x = sharesList[idx][0].toString();
+          const y = sharesList[idx][1].toString();
+          const part = participants.find((p) => p.id === recipientId)!;
+          const ct = await encryptWithPubkey(y, part.publicKey);
+
+          return {
+            recipientId,
+            x,
+            ciphertext: Array.from(ct),
+            status: "ACTIVE",
+            comment,
+            encryptionAlgorithm: "RSA-OAEP-SHA256",
+            expiresAt, // ISO string or null
+          };
+        })
+      );
+      await fetch("/api/shares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          p: p.toString(),
+          q: q.toString(),
+          g: g.toString(),
+          threshold,
+          commitments: commitments.map((c) => c.toString()),
+          type: type,
+          title: title,
+          shares: payload,
+        }),
+      });
+    }
+    else {
+      const {
+        privateKey: privKey,
+        publicKey: pubKey,   // переименовали
+        p: p_as_key,
+        a: a_as_key,
+        b: b_as_key,
+        m: m_as_key,
+        q: q_as_key,
+        xp: xp_as_key,
+        yp: yp_as_key,
+        Q: Q_as_key,
+      } = generateGostKeyPair();
+
+      console.log('asdad', privKey, pubKey);
+
+      const { p, q, g, commitments, sharesList } = shareSecretVSS(
+        new TextEncoder().encode(privKey),
+        threshold,
+        selected.size
+      );
+
+      const payload = await Promise.all(
+        Array.from(selected).map(async (recipientId, idx) => {
+          const x = sharesList[idx][0].toString();
+          const y = sharesList[idx][1].toString();
+          const part = participants.find((p) => p.id === recipientId)!;
+          const ct = await encryptWithPubkey(y, part.publicKey);
+
+          return {
+            recipientId,
+            x,
+            ciphertext: Array.from(ct),
+            status: "ACTIVE",
+            comment,
+            encryptionAlgorithm: "RSA-OAEP-SHA256",
+            expiresAt, // ISO string or null
+          };
+        })
+      );
+
+      await fetch("/api/shares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          p: p.toString(),
+          q: q.toString(),
+          g: g.toString(),
+          p_as_key,
+          a_as_key,
+          b_as_key,
+          m_as_key,
+          q_as_key,
+          xp_as_key,
+          yp_as_key,
+          Q_as_key,
+          threshold,
+          title,
+          commitments: commitments.map((c) => c.toString()),
+          type: type,
+          publicKey: pubKey,
+          shares: payload,
+        }),
+      });
+    }
+    // 3) Отправляем на сервер полный VSS-пакет:
+
 
     alert("Доли созданы и разосланы участникам!");
     // Сброс формы
@@ -114,6 +177,18 @@ export default function CreateShares() {
         <CardHeader title="Создать VSS-доли секрета" />
         <CardContent>
           <div className="space-y-4">
+
+            <div>
+              <label className="font-medium block mb-1">Название разделения</label>
+              <textarea
+                placeholder="Название разделения"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full p-2 border rounded"
+                rows={1}
+              />
+            </div>
+
             <div>
               <label className="font-medium block mb-1">Секрет</label>
               <textarea
@@ -123,6 +198,18 @@ export default function CreateShares() {
                 className="w-full p-2 border rounded"
                 rows={4}
               />
+            </div>
+
+            <div>
+              <label className="font-medium block mb-1">Выберите для чего вам разделения</label>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as FileType)}
+                className="border rounded px-2 py-1"
+              >
+                <option value="CUSTOM">Пользовательский</option>
+                <option value="ASYMMETRIC">Асимметричный</option>
+              </select>
             </div>
 
             <div>

@@ -10,8 +10,10 @@ import { log } from "@/lib/logger";
 
 export async function getCurrentUser() {
   const session = await getSession();
+  console.log('asdadasdasdasASDASDASDAS')
   if (!session?.user?.email) return null;
-  return prisma.user.findUnique({ where: { email: session.user.email } });
+  return prisma.user.findUnique({ 
+    where: { email: session.user.email }});
 }
 
 export const authOptions: NextAuthOptions = {
@@ -24,9 +26,29 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        console.log('sdad ');
         if (!credentials?.email || !credentials.password) return null;
 
-        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
+        const user = await prisma.user.findUnique({ 
+        where: { email: credentials.email },
+        include: {
+          company: { 
+            select: {
+              id: true, title: true
+            }
+          },
+          department: { 
+            select: {
+              id: true, title: true
+            }
+          },
+          manager: {
+            select: {
+              id: true, name: true
+            }
+          }
+        }})
+        console.log(user)
         if (!user?.passwordHash) return null;
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
@@ -36,12 +58,15 @@ export const authOptions: NextAuthOptions = {
         }
 
         log({ event: "auth_success", userId: user.id, email: user.email });
-        return { id: user.id, email: user.email, name: user.name };
+        return { id: user.id,
+           email: user.email,
+           name: user.name,
+           image: user.image };
       },
     }),
   ],
   session: { strategy: "jwt" },
-  pages: { signIn: "/auth" },
+  pages: { signIn: "/auth/login" },
   callbacks: {
     async redirect({ baseUrl }) {
       return `${baseUrl}/profile`;

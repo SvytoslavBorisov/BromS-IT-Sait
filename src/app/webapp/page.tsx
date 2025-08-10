@@ -47,7 +47,7 @@ export default function WebAppPage() {
           cursor: "pointer",
         }}
       >
-        Отправить данные боту
+        Отправить данные боту1
       </button>
     </div>
   );

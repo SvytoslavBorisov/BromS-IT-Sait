@@ -14,6 +14,11 @@ datasource db {
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
+
+//
+//   MODELS
+//
+
 model Account {
   id                 String  @id @default(cuid())
   userId             String
@@ -50,6 +55,10 @@ model Session {
 model User {
   id             String    @id @default(cuid())
   name           String?
+  surname        String?    @default("")
+  patronymic     String?    @default("")
+  age            DateTime?  @default(now())
+  sex            Sex?       @default(MALE)
   email          String    @unique
   passwordHash   String
   emailVerified  DateTime?
@@ -63,8 +72,17 @@ model User {
 
   recoverySessions RecoverySession[] @relation("RecoveryDealer")
   shareReceipts    ShareReceipt[]    @relation("ReceiptShareholder")
-  notification    Notification[]    @relation("userNotification")
-  sendReceipts    ShareReceipt[]    @relation("sendReceipts")
+  notification    Notification[]     @relation("userNotification")
+  sendReceipts    ShareReceipt[]     @relation("sendReceipts")
+  documents       Document[]         @relation("usersDocuments")
+  documentSignSession       documentSignSession[]         @relation("documentSignSessionDealer")
+
+  companyId       String?   
+  company         Company?         @relation("userCompany", fields: [companyId], references: [id])
+  positionId      String?         
+  position        Position?    @relation("userPosition", fields: [positionId], references: [id])
+  departmentId      String?         
+  department        Department?    @relation("userDepartment", fields: [departmentId], references: [id])
 
   accounts       Account[]
   sessions       Session[]
@@ -85,6 +103,7 @@ model VerificationToken {
 
 model ShamirSession {
   id          String    @id @default(cuid())
+  title       String?
   dealerId    String
   p           String    @default("")        // пустая строка
   q           String    @default("")
@@ -94,6 +113,8 @@ model ShamirSession {
   createdAt   DateTime  @default(now())
   status      String    @default("")
 
+  type        ShamirSessionStatus @default(CUSTOM)
+  publicKey   AsymmetricKey? @relation("asymmetricShareSession")
   shares      Share[]   @relation("SessionShares")
   recoveries  RecoverySession[]
 }
@@ -130,20 +151,52 @@ model Share {
   @@unique([sessionId, userId], name: "Share_sessionId_userId")
 }
 
- model RecoverySession {
-   id              String   @id @default(cuid())
-   dealerId        String
-   dealer          User         @relation("RecoveryDealer", fields:[dealerId], references:[id])
+model AsymmetricKey {
+  /// Уникальный идентификатор записи
+  id                   String          @id @default(uuid())
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
-   shareSessionId  String
-   shareSession    ShamirSession @relation(fields:[shareSessionId], references:[id])
+  /// Ссылка на сессию разделения приватного ключа
+  privateKeySharingId  String         @unique
+  privateKeySharing    ShamirSession  @relation("asymmetricShareSession", fields: [privateKeySharingId], references: [id])
 
-   status      RecoveryStatus @default(PENDING)
-   createdAt   DateTime       @default(now())
-   finishedAt  DateTime?
+  publicKey            String         @unique
 
-   receipts    ShareReceipt[]
- }
+  /// Параметры эллиптической кривой / поля
+  p                    String          // простое число модуля поля
+  a                    String          // коэффициент a кривой
+  b                    String          // коэффициент b кривой
+  m                    String          // порядок поля
+  q                    String          // порядок группы точек ЭК
+
+  /// Генератор G = (xp, yp)
+  xp                   String
+  yp                   String
+
+  /// Публичный ключ Q = d·G
+  Q                    String
+
+
+  documentSigns documentSignSession[] @relation("publicKeyOfdocumentSign")
+}
+
+model RecoverySession {
+  id              String   @id @default(cuid())
+  dealerId        String
+  dealer          User         @relation("RecoveryDealer", fields:[dealerId], references:[id])
+
+  shareSessionId  String
+  shareSession    ShamirSession @relation(fields:[shareSessionId], references:[id])
+
+  documentSignSession    documentSignSession[]    @relation("documentSignSessionRecovery")
+
+  status      RecoveryStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  finishedAt  DateTime?
+
+  receipts    ShareReceipt[]
+}
 
 model ShareReceipt {
   id             String   @id @default(cuid())
@@ -175,6 +228,104 @@ model Notification {
   user        User      @relation("userNotification", fields: [userId], references: [id])
 }
 
+model Document {
+  /// Уникальный идентификатор документа
+  id          String    @id @default(cuid())
+
+  /// Кем загружен
+  userId      String
+  user        User      @relation("usersDocuments", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Оригинальное имя файла
+  fileName    String
+
+  /// MIME-тип (например, "application/pdf")
+  fileType    String
+
+  /// Размер в байтах
+  fileSize    Int
+
+  /// Где хранится на сервере (абсолютный или относительный путь)
+  filePath    String
+
+  /// Произвольное описание или теги
+  description String?   @default("")
+
+  /// Дополнительные метаданные (например, превью, EXIF, checksum и т.п.)
+  metadata    Json?    @default("{}")
+
+  /// Когда загрузили
+  createdAt   DateTime @default(now())
+
+  /// Когда последний раз обновляли (если нужно)
+  updatedAt   DateTime @updatedAt
+
+  type        DocumentStatus? @default(NOTECRYPT)
+
+  documentSignSession    documentSignSession[]    @relation("documentIdSignSession")
+
+  @@map("documents")
+  @@index([userId, createdAt])
+}
+
+model documentSignSession {
+  id          String    @id @default(cuid())
+  dealerId        String
+  dealer          User         @relation("documentSignSessionDealer", fields:[dealerId], references:[id])
+
+  hash String?
+
+  publicKeyId String?
+  publicKey  AsymmetricKey?         @relation("publicKeyOfdocumentSign", fields:[publicKeyId], references:[id])
+  r String?  @default("")
+  s String?  @default("")
+
+  documentId        String
+  document          Document         @relation("documentIdSignSession", fields:[documentId], references:[id])
+
+  status RecoveryStatus @default(PENDING)
+  recoveryId String @unique
+  recovery RecoverySession @relation("documentSignSessionRecovery", fields:[recoveryId], references:[id])
+}
+
+
+model Company {
+  id          String    @id @default(cuid())
+  title       String    @default("Компания")
+  email       String    @unique
+  image       String?
+
+  user        User[]    @relation("userCompany")
+  positions   Position[]  @relation("companyPositions")
+  departments   Department[]  @relation("departmentCompany")
+}
+
+model Department {
+  id          String    @id @default(cuid())
+  title       String    @default("Отдел")
+  email       String    @unique
+
+  user        User[]    @relation("userDepartment")
+  companyId   String
+  company     Company   @relation("departmentCompany", fields: [companyId], references: [id])
+}
+
+model Position {
+  id          String    @id @default(cuid())
+  title       String    @default("Компания")
+  
+  companyId   String
+  company     Company   @relation("companyPositions", fields: [companyId], references: [id])
+
+  user        User[]    @relation("userPosition")
+
+  rank        Int       @default(100)
+}
+
+//
+//   ENUMS
+//
+
 enum RecoveryStatus {
   PENDING
   DONE
@@ -186,4 +337,19 @@ enum ShareStatus {
   USED
   EXPIRED
   // при необходимости можно добавить и другие состояния
+}
+
+enum DocumentStatus {
+  NOTECRYPT
+  ECRYPT
+}
+
+enum ShamirSessionStatus {
+  CUSTOM
+  ASYMMETRIC
+}
+
+enum Sex {
+  MALE
+  FEMALE
 }

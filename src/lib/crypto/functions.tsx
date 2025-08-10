@@ -84,6 +84,46 @@ export function verifyHmacGost(
   return timingSafeEqualHex(signatureHex, expected)
 }
 
+
+/**
+ * Вычисляет GOST-хэш сообщения: автоматически определяет формат входных данных
+ * (binary, hex или utf8-string) и возвращает hex-строку результата.
+ *
+ * @param data  — исходные данные (bin/hex/text)
+ * @param algo  — алгоритм GOST (по умолчанию GOST256)
+ * @returns     — hex-хэш
+ */
+export function hashGost(
+  data: string,
+  algo: GostAlgorithm = GOST512
+): string {
+  // Определяем, bin-ли это: только '0'/'1' и длина кратна 8
+  const isBin = /^[01]+$/.test(data) && data.length % 8 === 0;
+  // Или hex: 0–9, a–f, длина чётная
+  const isHex = /^[0-9a-fA-F]+$/.test(data) && data.length % 2 === 0;
+
+  let hexData: string;
+
+  if (isBin) {
+    // split на байты по 8 бит и конвертируем в hex
+    hexData = data
+      .match(/.{8}/g)!
+      .map(byte => parseInt(byte, 2).toString(16).padStart(2, '0'))
+      .join('');
+  } else if (isHex) {
+    hexData = data.toLowerCase();
+  } else {
+    // иначе — UTF-8 строка
+    hexData = Buffer.from(data, 'utf8').toString('hex');
+  }
+
+  // Вызываем ваш калькулятор хэша (не HMAC!) напрямую
+  // Первый параметр: '1' для GOST512, '0' для GOST256
+  const mode = algo.length === 512 ? '1' : '0';
+  return new HashCalculator(mode, 'hex', hexData).run();
+}
+
+
 /**
  * HMAC-SHA256 через встроенный crypto
  */
