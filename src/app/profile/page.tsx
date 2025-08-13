@@ -12,6 +12,7 @@ import Security         from "@/components/profile/Logs";
 import MyShares         from "@/components/profile/Shares";
 import ProfileProcesses from "@/components/profile/Process";
 import RecoverList      from "@/components/profile/RecoverList";
+import CreateShares      from "@/components/CreateShares";
 import DocumentsPage    from "@/components/profile/Documents";
 import { Badge } from "@/components/ui/badge_notif";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -33,8 +34,8 @@ export default function ProfilePage() {
   const unreadCount = notifs.filter(n => !n.isRead).length;
 
   const sp = useSearchParams();
-  const activeTab = (sp.get("tab") || "profile") as Tab;
-  const activeSubtab = sp.get("sub") as SubtabId | null;
+  const activeTab = (sp?.get("tab") || "profile") as Tab;
+  const activeSubtab = sp?.get("sub") as SubtabId | null;
 
   // редирект неавторизованных — только в эффекте
   useEffect(() => {
@@ -97,7 +98,7 @@ export default function ProfilePage() {
           default:
             return <MyShares />;
           case "keys.create":
-            return <div>Здесь форма создания ключа</div>;
+            return <CreateShares />;
           case "keys.import":
             return <div>Здесь импорт ключа</div>;
         }
@@ -149,20 +150,19 @@ export default function ProfilePage() {
         activeSubtab={activeSubtab}
         setActiveSubtab={setActiveSubtabDispatch}
       />
+        <div className="flex-1 ml-16">
+          <div className="absolute right-0 justify-between items-center mb-6 z-1">
+            <Badge count={unreadCount} />
+            <button
+              onClick={() => signOut({ callbackUrl: "/auth/login" })}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Выйти
+            </button>
+          </div>
 
-      <div className="flex-1">
-        <div className="absolute right-0 justify-between items-center mb-6 z-1">
-          <Badge count={unreadCount} />
-          <button
-            onClick={() => signOut({ callbackUrl: "/auth/login" })}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            Выйти
-          </button>
+          {isLoading ? <div>Загрузка...</div> : renderContent()}
         </div>
-
-        {isLoading ? <div>Загрузка...</div> : renderContent()}
-      </div>
     </div>
   );
 }

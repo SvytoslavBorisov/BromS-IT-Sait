@@ -1,0 +1,1 @@
+export type PlayerPresence = { id: string; name: string | null }

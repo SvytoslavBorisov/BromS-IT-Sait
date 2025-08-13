@@ -335,3 +335,7 @@
 {"event":"auth_success","userId":"cme18ibpw000rt9f429881c7h","email":"dasds@mail.ru","timestamp":"2025-08-10T15:13:34.756Z"}
 {"event":"auth_success","userId":"cme18ibpw000rt9f429881c7h","email":"dasds@mail.ru","timestamp":"2025-08-10T15:14:36.228Z"}
 {"event":"auth_success","userId":"cme18ibpw000rt9f429881c7h","email":"dasds@mail.ru","timestamp":"2025-08-10T15:17:02.760Z"}
+{"event":"recovery_started","recoveryId":"cme5xskzh0001t9w4095d09mj","shareSessionId":"cme2hkuei0006t918rt9ubn3y","participants":["cme18ibpw000rt9f429881c7h"],"timestamp":"2025-08-10T17:07:34.815Z"}
+{"event":"recovery_started","recoveryId":"cme5z984p0004t9w4rh79f4uq","sessionId":"cme2hm3y90007t918fa01b31a","participants":["cme18ibpw000rt9f429881c7h"],"timestamp":"2025-08-10T17:48:30.922Z"}
+{"event":"auth_success","userId":"cme18ibpw000rt9f429881c7h","email":"dasds@mail.ru","timestamp":"2025-08-11T08:22:24.792Z"}
+{"event":"auth_success","userId":"cme8avrno00009pe5wavn921w","email":"sv@mail.ru","timestamp":"2025-08-13T07:00:19.715Z"}

@@ -5,7 +5,7 @@ import { generateGostKeyPair } from "@/lib/crypto/gost3410";
 
 export type FileType = "CUSTOM" | "ASYMMETRIC";
 
-interface Participant {
+export interface Participant {
   id: string;
   name: string;
   publicKey: JsonWebKey;
