@@ -101,7 +101,7 @@ type KeyPair = {
   privateKey: string;
   publicKey: string; // x||y hex
   p: string; a: string; b: string; m: string; q: string;
-  xp: string; yp: string; Q: string;
+  xp: string; yp: string; Q: string; Qx: string; Qy: string
 };
 
 function generatePrivateScalar(): BN {
@@ -129,7 +129,7 @@ export function generateGostKeyPair(): KeyPair {
 
   return {
     privateKey,
-    publicKey,
+    publicKey: xHex + yHex.substring(1),
     p: DOMAIN_PARAMS.p.toString(16),
     a: DOMAIN_PARAMS.a.toString(16),
     b: DOMAIN_PARAMS.b.toString(16),
@@ -138,6 +138,8 @@ export function generateGostKeyPair(): KeyPair {
     xp: DOMAIN_PARAMS.xp.toString(16),
     yp: DOMAIN_PARAMS.yp.toString(16),
     Q: publicKey,
+    Qx: xHex,
+    Qy: yHex
   };
 }
 
@@ -146,8 +148,9 @@ export function generateGostKeyPair(): KeyPair {
 export function signGost(privateHex: string, message: string): { r: string; s: string } {
   // Шаг 1—2: e = hashToInt(M)
   const e = hashToInt(message);
+  console.log('e', e)
   const d = new BN(privateHex, 16);
-
+  console.log('d', d)
   let r: BN, s: BN;
   do {
 
@@ -189,6 +192,7 @@ export function verifyGost(publicKeyHex: string, message: string, rHex: string, 
   const s = new BN(sHex, 16);
   if (r.isZero() || r.gte(q) || s.isZero() || s.gte(q)) return false;
   const e = hashToInt(message);
+  console.log('e', e)
   const coordLen = q.byteLength() * 2;
   const Q: Point = {
     x: new BN(publicKeyHex.slice(0, coordLen), 16),

@@ -5,8 +5,7 @@ import forge from 'node-forge';
 import fs from 'fs';
 import { writeFileSync, unlinkSync, readFileSync } from "fs";
 import path from "path";
-import nodeCrypto from 'crypto';           // встроенный модуль Node.js
-import gostCrypto1 from 'gost-crypto/lib/index.js';
+import nodeCrypto from 'crypto';  
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { log } from "@/lib/logger"
@@ -16,20 +15,18 @@ import { verifyShare, reconstructSecretVSS }      from "@/lib/crypto/shamir";
 import { signGost, verifyGost, generateGostKeyPair }      from "@/lib/crypto/gost3410";
 import { fileToBitString }      from "@/lib/crypto/file_to_bits";
 import { loadPrivateJwk }   from "@/lib/crypto/secure-storage";
-import os from "os";
-import { spawn } from "child_process";
-import BN from 'bn.js';
-import jwkToPem from 'jwk-to-pem';
-import type { ECPrivate } from "jwk-to-pem"; 
 import asn1 from "asn1.js";
-import { execSync } from 'child_process'
-import * as asn1js from 'asn1js';
-import { Certificate, PrivateKeyInfo } from 'pkijs';
-import { Crypto } from "@peculiar/webcrypto";
-import gostEngine from 'gost-crypto/lib/gostEngine'
-import { gostCrypto } from 'node-gost-crypto';
-
 export const runtime = 'nodejs';  // убедитесь, что это nodejs роут
+
+
+interface Asn1DefinitionContext {
+  seq(): any;
+  obj(items: Record<string, any>): any;
+  key(name: string): {
+    int(): void;
+    // Добавьте другие методы по необходимости
+  };
+}
 
 
 export async function POST(req: NextRequest) {
@@ -166,7 +163,8 @@ export async function POST(req: NextRequest) {
         const absPath = path.join(process.cwd(), original.filePath);
 
         const hexData = await fileToBitString(absPath)
-        const { r, s } = signGost(new TextDecoder().decode(bytes), hexData);
+        const privPem = new TextDecoder().decode(bytes);
+        const { r, s } = signGost(privPem, hexData);
         
         await prisma.documentSignSession.update({
             where: { recoveryId: recovery!.id },
@@ -179,76 +177,30 @@ export async function POST(req: NextRequest) {
 
         console.log(verifyGost(recovery?.shareSession.publicKey?.publicKey!, hexData, r, s));
 
-        const privPem = new TextDecoder().decode(bytes);
         
-        console.log('asdada', privPem, recovery?.shareSession.publicKey?.publicKey!, r, s);
+        console.log('privPem', privPem)
+        console.log('r', r)
+        console.log('s', s)
+        console.log('recovery?.shareSession.publicKey?.publicKey!', recovery?.shareSession.publicKey?.publicKey!)
+        // const GOSTSignature = asn1.define('GOSTSignature', function(this: Asn1DefinitionContext) {
+        // // Главный SEQUENCE содержит один элемент - другой SEQUENCE
+        //     this.seq().obj(
+        //         this.key('signature').seq().obj(
+        //         this.key('r').int(),
+        //         this.key('s').int()
+        //         )
+        //     );
+        // });
 
-        const dHex = Buffer.from(bytes).toString("hex");
+        // // Кодируем в DER
+        // const derSignature = GOSTSignature.encode({ r, s }, 'der');
+        // fs.writeFileSync('signature.sig', derSignature);
 
-        const coordLen = recovery?.shareSession.publicKey?.publicKey!.length! / 2;
-        const xHex = recovery?.shareSession.publicKey?.publicKey!.slice(0, coordLen);
-        const yHex = recovery?.shareSession.publicKey?.publicKey!.slice(coordLen);
-
-        const idGostR3410_2012_256 = [1,2,643,7,1,1,1,1];
-        const gostParamSetA        = [1,2,643,2,2,35,1]; 
-
-        // 5) Собираем буферы
-        // --- константы-OID-ы ---------------------------------------------------------
-        const id_tc26_gost3410_12_256   = [1, 2, 643, 7, 1, 1, 1, 1];  // id-tc26-gost3410-12-256
-        const id_GostR3410_2001_CPA     = [1, 2, 643, 2, 2, 35, 1];     // CryptoPro A
-        const id_tc26_gost3411_12_256   = [1, 2, 643, 7, 1, 1, 2, 2];  // id-tc26-gost3411-12-256
-
-        // --- Схема чистого GOST ECPrivateKey без PKCS#8 и без publicKey ----------------
-        const GOSTPrivateKey = asn1.define('GOSTPrivateKey', function(this: any) {
-        this.seq().obj(
-            this.key('version').int(),                               // INTEGER, чаще 0 или 1
-            this.key('algorithm').seq().obj(                         // AlgorithmIdentifier
-            this.key('algorithm').objid(),                        // id-tc26-gost3410-12-256
-            this.key('parameters').seq().obj(
-                this.key('publicKeyParamSet').objid(),              // id-GostR3410-2001-CryptoPro-A-ParamSet
-                this.key('digestParamSet').objid()                  // id-tc26-gost3411-12-256
-            )
-            ),
-            this.key('privateKey').octstr()                         // OCTET STRING (32 байта)
-        );
-        });
-
-        // --- Входные данные ---------------------------------------------------------
-        const privateKeyHex = '0953067fd9c7f34adb91a8e65179b32e6c486ce8759630ad241c9e85b1b52ba4';
-        const dBuf = Buffer.from(privateKeyHex, 'hex');
-        console.log(dBuf);
-
-        // --- Кодируем GOST ECPrivateKey → DER --------------------------------------
-        const gostDer = GOSTPrivateKey.encode({
-        version:     0,
-        algorithm: {
-            algorithm:  id_tc26_gost3410_12_256,
-            parameters: {
-            publicKeyParamSet: id_GostR3410_2001_CPA,
-            digestParamSet:    id_tc26_gost3411_12_256
-            }
-        },
-        privateKey: dBuf
-        }, 'der');
-
-        // --- Собираем PEM -----------------------------------------------------------
-        const pemLines = gostDer.toString('base64').match(/.{1,64}/g)!;
-        const pem = [
-        '-----BEGIN PRIVATE KEY-----',
-        ...pemLines,
-        '-----END PRIVATE KEY-----',
-        ''
-        ].join('\n');
-        const tmpKeyPath = path.join('C:\\Users\\svyto', `gostkey-${Date.now()}.pem`);
-        writeFileSync(tmpKeyPath, pem, 'utf8');
-// --- Записываем файл под WSL в Windows-папку --------------------------------
-// --- 4) Записываем в Windows-папку через WSL-путь ---------------------------
-
-        return new NextResponse(pem, {
+        return new NextResponse('', {
             status: 201,
             headers: {
             "Content-Type":        "application/pkcs7-signature",
-            "Content-Disposition": `attachment; filename="${original.fileName}.p7s"`
+            "Content-Disposition": `attachment; filename="${original.fileName}.sig"`
             }
         });
     }

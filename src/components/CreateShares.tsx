@@ -16,6 +16,7 @@ export default function CreateShares() {
   const [title, setTitle] = useState("Разделение");
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [type, setType] = useState<FileType>("CUSTOM");
+  const [fileContent, setFileContent] = useState<string>('');
 
   useEffect(() => {
     fetch("/api/participants", { cache: "no-store" })
@@ -34,6 +35,30 @@ export default function CreateShares() {
     });
   };
 
+  function downloadAsFile(data: string | Uint8Array, fileName: string, mimeType: string) {
+    const blob = new Blob([data], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  }
+
+  useEffect(() => {
+    fetch('broms.cer') // Если файл в public/, можно напрямую указать путь
+      .then((response) => response.arrayBuffer())
+      .then((data) => {
+        console.log('CER file loaded:', data);
+        // Декодируем как текст (если PEM) или работаем с бинарными данными
+        const text = new TextDecoder().decode(data);
+        console.log('As text:', text);
+        setFileContent(text)
+      });
+  }, []);
+
   const handleCreate = async () => {
     if (type === "CUSTOM" && !secret) return;
     if (selected.size < threshold) return;
@@ -48,26 +73,65 @@ export default function CreateShares() {
         comment,
         expiresAt
       );
+
+      await fetch("/api/shares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, title, type }),
+      });
+
     } else {
-      data = await createAsymmetricShares(
+      const data1 = await createAsymmetricShares(
         participants,
         Array.from(selected),
         threshold,
         comment,
-        expiresAt
+        expiresAt,
+        fileContent,
+        'f1f1205a8f0bab12aff2a5ed08296c9894686aa62ec0e131c20cafa71c59b9f1',
+        'sv@mail.ru',
+        'Slava2',
+        new Date().toISOString(),
+        new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        '3'
       );
-    }
 
-    await fetch("/api/shares", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...data, title, type }),
-    });
+      console.log(data1);
+      // console.log(fileContent)
+      // const res = await fetch("/api/create/sertification", {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({
+      //     email: 'sv@mail.ru',
+      //     cn: 'Slava2',
+      //     issuerCertPemOrDer: fileContent,
+      //     issuerPrivHex: 'f1f1205a8f0bab12aff2a5ed08296c9894686aa62ec0e131c20cafa71c59b9f1',
+      //     subjectPrivHex: '6c13eb9a952e28ec3b1ac7a668b89e37f881a865e39a3b224aa95de8e61db90e',
+      //     notBefore: new Date().toISOString(),
+      //     notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // +1 год
+      //   }),
+      // });
+
+      // if (!res.ok) {
+      //   throw new Error(`Ошибка ${res.status}: ${await res.text()}`);
+      // }
+
+      // const cerContent = await res.json(); // Извлекаем base64-строку
+      console.log(data1.pem)
+      downloadAsFile(data1.pem, title + '.cer', 'application/x-x509-ca-cert');
+      
+      await fetch("/api/shares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data1, title, type }),
+      });
+
+    }
 
     alert("Доли созданы и отправлены!");
     setSecret("");
     setSelected(new Set());
-    setThreshold(2);
+    setThreshold(1);
     setComment("");
     setExpiresAt(null);
   };

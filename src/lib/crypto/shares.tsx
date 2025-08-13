@@ -2,6 +2,8 @@
 import { shareSecretVSS } from "@/lib/crypto/shamir";
 import { encryptWithPubkey } from "@/lib/crypto/keys";
 import { generateGostKeyPair } from "@/lib/crypto/gost3410";
+import { issueCertificateUsingGostEc } from "@/lib/crypto/generate_sertificate";
+import { streebog256 } from "@/lib/crypto/streebog";
 
 export type FileType = "CUSTOM" | "ASYMMETRIC";
 
@@ -59,7 +61,14 @@ export async function createAsymmetricShares(
   selectedIds: string[],
   threshold: number,
   comment: string,
-  expiresAt: string | null
+  expiresAt: string | null,
+  issuerCertPemOrDer: string,
+  issuerPrivHex: string,
+  email: string,
+  cn: string,
+  notBefore: string,
+  notAfter: string,
+  serial: string 
 ) {
   const {
     privateKey: privKey,
@@ -72,6 +81,8 @@ export async function createAsymmetricShares(
     xp: xp_as_key,
     yp: yp_as_key,
     Q: Q_as_key,
+    Qx,
+    Qy
   } = generateGostKeyPair();
 
   const { p, q, g, commitments, sharesList } = shareSecretVSS(
@@ -79,6 +90,13 @@ export async function createAsymmetricShares(
     threshold,
     selectedIds.length
   );
+
+  console.log('pubKey_create', privKey, new TextEncoder().encode(privKey))
+  console.log('pubKey_create', pubKey)
+  console.log('pubKey_create', Q_as_key)
+  console.log('pubKey_create', Qx)
+  console.log('pubKey_create', Qy)
+  
 
   const payload = await Promise.all(
     selectedIds.map(async (recipientId, idx) => {
@@ -99,6 +117,23 @@ export async function createAsymmetricShares(
     })
   );
 
+  const res = await issueCertificateUsingGostEc({
+    issuerCertDerOrPem: issuerCertPemOrDer,   // PEM строка или DER bytes/base64
+    issuerPrivateKeyHex: issuerPrivHex,       // hex без 0x
+    subjectPrivateKeyHex: privKey,     // можно не передавать Q — выведем
+    subjectPublicQxHex: Qx,      // опционально, если хочешь задать явно
+    subjectPublicQyHex: Qy.substring(1),
+    subjectEmail: email,
+    subjectCN: cn,
+    notBefore: new Date(notBefore),
+    notAfter:  new Date(notAfter),
+    serialNumber: serial,                     // опционально
+    streebog256,
+    // curve: CryptoProA_2012_256,              // опционально, по умолчанию уже так
+  });
+
+  console.log('pubKey_sert', res.subjectPubQxHex, res.subjectPubQyHex)
+
   return {
     p: p.toString(),
     q: q.toString(),
@@ -115,5 +150,6 @@ export async function createAsymmetricShares(
     commitments: commitments.map((c) => c.toString()),
     publicKey: pubKey,
     shares: payload,
+    pem: res.pem
   };
 }

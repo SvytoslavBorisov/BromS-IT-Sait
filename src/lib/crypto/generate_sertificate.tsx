@@ -443,7 +443,7 @@ function extractIssuerNameAndSerial(der: Uint8Array): { issuerNameTLV: Uint8Arra
   const intVal = der.slice(serialTLV.tlv.valOff, serialTLV.tlv.end);
   const serialInt = integerBytesToBigInt(intVal);
 
-  return { issuerNameTLV: der.slice(top.valOff + (issuerTLV as any).tlv?.valOff - top.valOff - ((issuerTLV as any) ? 0 : 0), issuerTLV.tlv ? issuerTLV.tlv.end - issuerTLV.tlv.valOff + issuerTLV.tlv.head : issuerTLV.slice.length) || issuerTLV.slice, issuerSerialInt: serialInt };
+  return { issuerNameTLV: issuerTLV.slice, issuerSerialInt: serialInt };
 }
 
 // integer bytes may have leading 00
