@@ -6,6 +6,8 @@ import { createCustomShares, createAsymmetricShares, FileType, Participant } fro
 import ParticipantsList from "@/components/profile/ParticipantsList";
 import { Card, CardHeader, CardContent } from "@/components/ui/cards";
 import { Button } from "@/components/ui/button";
+import { Session } from "inspector/promises";
+import { useSession } from "next-auth/react";
 
 export default function CreateShares() {
   const [secret, setSecret] = useState("");
@@ -17,6 +19,8 @@ export default function CreateShares() {
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [type, setType] = useState<FileType>("CUSTOM");
   const [fileContent, setFileContent] = useState<string>('');
+
+  const { data: session, status } = useSession();
 
   useEffect(() => {
     fetch("/api/participants", { cache: "no-store" })
@@ -89,8 +93,8 @@ export default function CreateShares() {
         expiresAt,
         fileContent,
         'f1f1205a8f0bab12aff2a5ed08296c9894686aa62ec0e131c20cafa71c59b9f1',
-        'sv@mail.ru',
-        'Slava2',
+        'sv_borisov03@mail.ru',
+        'SvyTo',
         new Date().toISOString(),
         new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         '3'

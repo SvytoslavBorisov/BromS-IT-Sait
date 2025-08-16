@@ -1,7 +1,7 @@
 // lib/crypto/shares.ts
 import { shareSecretVSS } from "@/lib/crypto/shamir";
 import { encryptWithPubkey } from "@/lib/crypto/keys";
-import { generateGostKeyPair } from "@/lib/crypto/gost3410";
+import { generateGostKeyPair } from "@/lib/crypto/dsgost";
 import { issueCertificateUsingGostEc } from "@/lib/crypto/generate_sertificate";
 import { streebog256 } from "@/lib/crypto/streebog";
 
@@ -70,13 +70,13 @@ export async function createAsymmetricShares(
   notAfter: string,
   serial: string 
 ) {
+
   const {
     privateKey: privKey,
     publicKey: pubKey,
     p: p_as_key,
     a: a_as_key,
     b: b_as_key,
-    m: m_as_key,
     q: q_as_key,
     xp: xp_as_key,
     yp: yp_as_key,
@@ -122,7 +122,7 @@ export async function createAsymmetricShares(
     issuerPrivateKeyHex: issuerPrivHex,       // hex без 0x
     subjectPrivateKeyHex: privKey,     // можно не передавать Q — выведем
     subjectPublicQxHex: Qx,      // опционально, если хочешь задать явно
-    subjectPublicQyHex: Qy.substring(1),
+    subjectPublicQyHex: Qy,
     subjectEmail: email,
     subjectCN: cn,
     notBefore: new Date(notBefore),
@@ -141,7 +141,7 @@ export async function createAsymmetricShares(
     p_as_key,
     a_as_key,
     b_as_key,
-    m_as_key,
+    m_as_key: '',
     q_as_key,
     xp_as_key,
     yp_as_key,

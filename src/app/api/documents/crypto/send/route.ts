@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import forge from 'node-forge';
-import fs from 'fs';
+import { promises as fs } from "fs";
 import { writeFileSync, unlinkSync, readFileSync } from "fs";
 import path from "path";
 import nodeCrypto from 'crypto';  
@@ -12,10 +12,13 @@ import { log } from "@/lib/logger"
 import { authOptions }       from "@/lib/auth";
 import { decodeCiphertext }      from "@/lib/crypto/keys";
 import { verifyShare, reconstructSecretVSS }      from "@/lib/crypto/shamir";
-import { signGost, verifyGost, generateGostKeyPair }      from "@/lib/crypto/gost3410";
+import { DSGOST }      from "@/lib/crypto/dsgost";
+import { saveGostSigFile, signFileStreebog256 }      from "@/lib/crypto/create_sig";
+import { signFileToCMS_DER }      from "@/lib/crypto/cms-gost";
 import { fileToBitString }      from "@/lib/crypto/file_to_bits";
 import { loadPrivateJwk }   from "@/lib/crypto/secure-storage";
 import asn1 from "asn1.js";
+import { streebog256, streebog512 } from "@/lib/crypto/streebog"; // твой модуль
 export const runtime = 'nodejs';  // убедитесь, что это nodejs роут
 
 
@@ -28,6 +31,47 @@ interface Asn1DefinitionContext {
   };
 }
 
+// вспомогалки
+const bytesToHex = (u8: Uint8Array) => Array.from(u8, b => b.toString(16).padStart(2,"0")).join("");
+const toU8 = (b: Buffer) => new Uint8Array(b);
+
+// DER -> PEM
+function derToPem(type: "CERTIFICATE", der: Uint8Array): string {
+  const b64 = Buffer.from(der).toString("base64");
+  const body = b64.match(/.{1,64}/g)?.join("\n") ?? b64;
+  return `-----BEGIN ${type}-----\n${body}\n-----END ${type}-----\n`;
+}
+async function readCertAsPEM(relPath: string): Promise<string> {
+  const abs = path.join(process.cwd(), relPath);
+  const buf = await fs.readFile(abs);
+  const txt = buf.toString("utf8");
+  return txt.includes("-----BEGIN CERTIFICATE-----")
+    ? txt
+    : derToPem("CERTIFICATE", new Uint8Array(buf));
+}
+
+export async function makeSig(privDHex: string, dataPath: string) {
+  // параметры кривой
+  const p  = 115792089237316195423570985008687907853269984665640564039457584007913129639319n;
+  const a  = 115792089237316195423570985008687907853269984665640564039457584007913129639316n;
+  const b  = 166n;
+  const xG = 1n;
+  const yG = 64033881142927202683649881450433473985931760268884941288852745803908878638612n;
+  const q  = 115792089237316195423570985008687907853073762908499243225378155805079068850323n;
+  const gost = new DSGOST(p, a, b, q, xG, yG);
+
+  const fileBytes = new Uint8Array(await fs.readFile(dataPath));
+  const certPem = await readCertAsPEM("public/1508.cer");
+
+  const cmsDER = signFileToCMS_DER(gost, fileBytes, certPem, privDHex, '45841419bb673b29d974853dbb5a3a504ced44d57de7acf8883685b1590aaac02a97a4a5597110e746e13880403e1cfe712bb936396c142cc33c2e085a21451c');
+  const out = path.join(process.cwd(), "signature.sig");
+  await fs.writeFile(out, cmsDER);
+//     console.log(privDHex)
+//   const xml = signFileToCMS_DER(gost, fileBytes, certPem, privDHex);
+//   writeFileSync("file.xlsx.xmlsig", xml, "utf8");
+
+  return out;
+}
 
 export async function POST(req: NextRequest) {
   // 1) Авторизация
@@ -164,45 +208,45 @@ export async function POST(req: NextRequest) {
 
         const hexData = await fileToBitString(absPath)
         const privPem = new TextDecoder().decode(bytes);
-        const { r, s } = signGost(privPem, hexData);
-        
-        await prisma.documentSignSession.update({
-            where: { recoveryId: recovery!.id },
-            data: {
-                publicKeyId: recovery?.shareSession.publicKey?.id,
-                r,
-                s
-            }
-        });
 
-        console.log(verifyGost(recovery?.shareSession.publicKey?.publicKey!, hexData, r, s));
+        const p  = 115792089237316195423570985008687907853269984665640564039457584007913129639319n;
+        const a  = 115792089237316195423570985008687907853269984665640564039457584007913129639316n;
+        const b  = 166n;
+        const xG = 1n;
+        const yG = 64033881142927202683649881450433473985931760268884941288852745803908878638612n;
+        const q  = 115792089237316195423570985008687907853073762908499243225378155805079068850323n;
 
-        
-        console.log('privPem', privPem)
-        console.log('r', r)
-        console.log('s', s)
-        console.log('recovery?.shareSession.publicKey?.publicKey!', recovery?.shareSession.publicKey?.publicKey!)
-        // const GOSTSignature = asn1.define('GOSTSignature', function(this: Asn1DefinitionContext) {
-        // // Главный SEQUENCE содержит один элемент - другой SEQUENCE
-        //     this.seq().obj(
-        //         this.key('signature').seq().obj(
-        //         this.key('r').int(),
-        //         this.key('s').int()
-        //         )
-        //     );
-        // });
+        const gost = new DSGOST(p, a, b, q, xG, yG);
 
-        // // Кодируем в DER
-        // const derSignature = GOSTSignature.encode({ r, s }, 'der');
-        // fs.writeFileSync('signature.sig', derSignature);
+        // // console.log(privPem, recovery!.shareSession.publicKey?.publicKey!)
 
-        return new NextResponse('', {
-            status: 201,
-            headers: {
-            "Content-Type":        "application/pkcs7-signature",
-            "Content-Disposition": `attachment; filename="${original.fileName}.sig"`
-            }
-        });
+        // // const { r, s } = gost.signHex("0x7b", privPem);
+
+        // // console.log(r, s)
+
+        // // console.log(gost.verifyHex(123n, r, s, recovery!.shareSession.publicKey?.publicKey!))
+
+        // //  // пример; 0x7b == 123
+        // // saveGostSigFile(r, s, q, "/Users/SvyTo/test.sig");
+
+
+        // const { r, s, sigPath } = await signFileStreebog256(
+        //     gost,
+        //     absPath,
+        //     privPem,                 // приватный ключ как hex d (не PEM!)
+        //     "/Users/SvyTo/signature.sig"
+        // );
+
+        // // 2) Проверить своим кодом (тот же digest):
+        // const data = await fs.readFile(absPath);
+        // const digest = streebog256(new Uint8Array(data));
+        // const ok = gost.verifyHex("0x" + bytesToHex(digest), r, s, recovery!.shareSession.publicKey?.publicKey!);
+        // console.log("verify by code:", ok);
+
+        const privDHex = new TextDecoder().decode(bytes); // это d в hex!
+        const sigPath = await makeSig(privDHex, absPath);
+        console.log(privDHex)
+        return {  };
     }
 
 }
