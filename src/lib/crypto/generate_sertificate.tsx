@@ -42,7 +42,7 @@ export type IssueResult = {
 
 /* =============== OIDs =============== */
 const OID = {
-  SIGNWITHDIGEST_256: "1.2.643.7.1.1.3.2",
+  SIGNWITHDIGEST_256: "1.2.643.7.1.1.3.2", // GOST 34.10-2012 + 34.11-2012 (256)
   PUBKEY_2012_256:    "1.2.643.7.1.1.1.1",
   CPRO_XCHA:          "1.2.643.2.2.36.0",
   DIGEST_256:         "1.2.643.7.1.1.2.2",
@@ -56,26 +56,15 @@ const OID = {
 
 /* =============== bytes/bigint/DER утилиты =============== */
 function hexToBytesBE(hex: string, size?: number): Uint8Array {
-  // 1) нормализация
-  let h = hex.trim()
-    .replace(/^0x/i, "")           // срежь 0x / 0X
-    .replace(/[\s:_-]/g, "");       // убери пробелы, двоеточия, подчёркивания, дефисы
-
-  // 2) валидация
-  if (!/^[0-9a-fA-F]*$/.test(h)) {
-    throw new Error(`Invalid hex string: ${hex}`);
-  }
-
-  // 3) нечётная длина — добиваем слева (MSB)
+  let h = hex.trim().replace(/^0x/i, "").replace(/[\s:_-]/g, "");
+  if (!/^[0-9a-fA-F]*$/.test(h)) throw new Error(`Invalid hex string: ${hex}`);
   if (h.length % 2) h = "0" + h;
 
-  // 4) парсинг без побочных эффектов
   const out = new Uint8Array(h.length / 2);
   for (let i = 0, j = 0; i < h.length; i += 2, j++) {
     out[j] = (parseInt(h[i], 16) << 4) | parseInt(h[i + 1], 16);
   }
 
-  // 5) если задан размер — приводим к нему (с нулями слева или ошибка при переполнении)
   if (size !== undefined) {
     if (out.length > size) throw new Error(`Hex too long: expected ≤${size}B, got ${out.length}B`);
     if (out.length < size) {
@@ -165,34 +154,24 @@ function derToPem(der:Uint8Array,label:string):string{
 
 /** Жёстко и корректно вытаскиваем issuer.Name и issuer.serialNumber из DER издателя */
 function extractIssuerNameAndSerial(der: Uint8Array){
-  // Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue }
   const cert = parseTLV(der, 0);
   if (cert.tag !== 0x30) throw new Error("issuer cert: not SEQUENCE");
   const certVal = der.slice(cert.valOff, cert.end);
 
-  // tbsCertificate — первый элемент
   const tbsTLV = parseTLV(certVal, 0);
   if (tbsTLV.tag !== 0x30) throw new Error("issuer cert: no TBS");
   const tbsVal = certVal.slice(tbsTLV.valOff, tbsTLV.end);
 
-  // TBSCertificate ::= SEQUENCE {
-  //   [0] EXPLICIT Version DEFAULT v1,
-  //   serialNumber INTEGER,
-  //   signature AlgorithmIdentifier,
-  //   issuer Name, ...
-  // }
   let off = 0;
 
-  // optional [0] Version
+  // [0] EXPLICIT Version (optional)
   const first = parseTLV(tbsVal, off);
-  let haveVersion = false;
-  if (first.tag === 0xA0) { haveVersion = true; off += first.head + first.len; }
+  if (first.tag === 0xA0) { off += first.head + first.len; }
 
   // serialNumber
   const serial = parseTLV(tbsVal, off);
   if (serial.tag !== 0x02) throw new Error("issuer cert: serial INTEGER not found");
   const serialBytes = tbsVal.slice(serial.valOff, serial.end);
-  // strip leading sign 0x00
   let si = 0; while (si < serialBytes.length && serialBytes[si] === 0x00) si++;
   const issuerSerialInt = bytesToBigInt(serialBytes.slice(si));
   off += serial.head + serial.len;
@@ -216,22 +195,30 @@ function defaultRng(n:number){
   if(typeof crypto!=="undefined" && (crypto as any).getRandomValues){
     const b=new Uint8Array(n); (crypto as any).getRandomValues(b); return b;
   }
+  // @ts-ignore
   return require("crypto").randomBytes(n);
 }
 
-/* маленький SHA‑1 для SKI (как в python-версии) */
+/* маленький SHA-1 для SKI (как в python-версии) */
 function sha1(msg: Uint8Array): Uint8Array {
   const w=new Uint32Array(80); const ml=msg.length*8;
   const withOne=new Uint8Array(((msg.length+9+63)>>6)<<6); withOne.set(msg,0); withOne[msg.length]=0x80;
-  const dv=new DataView(withOne.buffer); dv.setUint32(withOne.length-4, ml>>>0, false); dv.setUint32(withOne.length-8, Math.floor(ml/2**32)>>>0, false);
+  const dv=new DataView(withOne.buffer);
+  dv.setUint32(withOne.length-4, ml>>>0, false);
+  dv.setUint32(withOne.length-8, Math.floor(ml/2**32)>>>0, false);
   let h0=0x67452301|0,h1=0xEFCDAB89|0,h2=0x98BADCFE|0,h3=0x10325476|0,h4=0xC3D2E1F0|0;
-  for(let i=0;i<withOne.length;i+=64){ for(let j=0;j<16;j++) w[j]=dv.getUint32(i+4*j,false);
+  for(let i=0;i<withOne.length;i+=64){
+    for(let j=0;j<16;j++) w[j]=dv.getUint32(i+4*j,false);
     for(let j=16;j<80;j++){ const v=(w[j-3]^w[j-8]^w[j-14]^w[j-16]); w[j]=(v<<1)|(v>>>31); }
     let a=h0,b=h1,c=h2,d=h3,e=h4;
-    for(let j=0;j<80;j++){ const f=j<20?((b&c)|((~b)&d)): j<40?(b^c^d): j<60?((b&c)|(b&d)|(c&d)):(b^c^d);
+    for(let j=0;j<80;j++){
+      const f=j<20?((b&c)|((~b)&d)): j<40?(b^c^d): j<60?((b&c)|(b&d)|(c&d)):(b^c^d);
       const k=j<20?0x5A827999: j<40?0x6ED9EBA1: j<60?0x8F1BBCDC: 0xCA62C1D6;
-      const t=(((a<<5)|(a>>>27)) + f + e + k + w[j])|0; e=d; d=c; c=((b<<30)|(b>>>2))|0; b=a; a=t; }
-    h0=(h0+a)|0; h1=(h1+b)|0; h2=(h2+c)|0; h3=(h3+d)|0; h4=(h4+e)|0; }
+      const t=(((a<<5)|(a>>>27)) + f + e + k + w[j])|0;
+      e=d; d=c; c=((b<<30)|(b>>>2))|0; b=a; a=t;
+    }
+    h0=(h0+a)|0; h1=(h1+b)|0; h2=(h2+c)|0; h3=(h3+d)|0; h4=(h4+e)|0;
+  }
   const out=new Uint8Array(20); const d2=new DataView(out.buffer);
   d2.setUint32(0,h0>>>0,false); d2.setUint32(4,h1>>>0,false); d2.setUint32(8,h2>>>0,false); d2.setUint32(12,h3>>>0,false); d2.setUint32(16,h4>>>0,false);
   return out;
@@ -274,17 +261,15 @@ export async function issueGost256Certificate(opts: IssueOptions): Promise<Issue
      const rd=(rng??defaultRng)(64);
      dSub=(bytesToBigInt(rd)%(q-1n))+1n;
   }
-  console.log('asdasd', subjectPublicQxHex, subjectPublicQyHex)
+
   // Qx/Qy (BE hex) → LE bytes (ГОСТ)
   const QxBE = hexToBytesBE(subjectPublicQxHex!);
   const QyBE = hexToBytesBE(subjectPublicQyHex!);
-  console.log('asdasd', QxBE, QyBE)
   const QxLE = beToLe(QxBE);
   const QyLE = beToLe(QyBE);
-  console.log('asdasd', QxLE, QyLE)
+
   // subjectPublicKey: BIT STRING { OCTET STRING(QxLE||QyLE) } — как в python
   const pubkeyOctet = OCTET_STRING(concat(QxLE, QyLE));
-  console.log('asdasd', pubkeyOctet)
   const spkiAlgo = SEQ(
     OID_DER(OID.PUBKEY_2012_256),
     SEQ(
@@ -293,8 +278,6 @@ export async function issueGost256Certificate(opts: IssueOptions): Promise<Issue
     )
   );
   const spki = SEQ(spkiAlgo, BIT_STRING(pubkeyOctet, 0));
-
-  console.log('spki', spki)
 
   // Subject / Validity (CN: UTF8 если есть не-ASCII)
   const isAscii = /^[\x20-\x7E]*$/.test(subjectCN);
@@ -306,55 +289,66 @@ export async function issueGost256Certificate(opts: IssueOptions): Promise<Issue
   );
   const validity = SEQ(UTCTime(notBefore), UTCTime(notAfter));
 
-  // Extensions
-  const ski = sha1(pubkeyOctet); // строго как в твоём python
-  const ext_ski = SEQ(OID_DER(OID.SKI), OCTET_STRING(OCTET_STRING(ski)));
+  /* -------- Extensions -------- */
 
-  // KeyUsage: digitalSignature; critical=TRUE; unusedBits=7 для 0x80
-  const kuBits = new Uint8Array([0xC6]);
+  // SKI: как в твоей python-версии — SHA-1 от содержимого subjectPublicKey (DER OCTET STRING внутри BIT STRING)
+  const ski = sha1(pubkeyOctet);
+  const ext_ski = SEQ(
+    OID_DER(OID.SKI),
+    OCTET_STRING(OCTET_STRING(ski)) // extnValue ::= OCTET STRING( OCTET STRING(ski) )
+  );
+
+  // KeyUsage: только digitalSignature; critical=TRUE; DER: 03 02 07 80
+  const kuBits = new Uint8Array([0x80]); // digitalSignature (bit 0)
   const ext_ku = SEQ(
     OID_DER(OID.KU),
-    BOOLEAN(true),
-    OCTET_STRING(BIT_STRING(kuBits, 1))
+    BOOLEAN(true), // critical
+    OCTET_STRING(BIT_STRING(kuBits, 7)) // unused=7 для 1 значащего бита
   );
 
   // BasicConstraints: CA=FALSE; critical=TRUE
-  const bc_inner = SEQ(
-    BOOLEAN(true),                 // cA = TRUE
-    INTEGER(1n)                    // pathLenConstraint = 1
-  );
+  const bc_inner = SEQ(BOOLEAN(false)); // cA = FALSE
   const ext_bc = SEQ(
     OID_DER(OID.BC),
-    BOOLEAN(true),                 // critical = TRUE
-    OCTET_STRING(bc_inner)         // даст 30 06 01 01 FF 02 01 01
+    BOOLEAN(true),               // critical = TRUE
+    OCTET_STRING(bc_inner)
   );
 
-  // AKI: [1] directoryName(Name), [2] serialNumber (INTEGER content, IMPLICIT)
-  const aki_value = SEQ(
-    tlv(0xA1, tlv(0xA4, issuerNameTLV)),
-    tlv(0x82, intToUnsigned(issuerSerialInt))
-  );
+  // AKI: authorityCertIssuer (GeneralNames ::= SEQUENCE OF GeneralName) + authorityCertSerialNumber
+  // directoryName ::= [4] Name (EXPLICIT)
+  // authorityCertIssuer ::= [1] GeneralNames
+  const authorityCertIssuer = tlv(0xA1, SEQ( tlv(0xA4, issuerNameTLV) ));
+  const authorityCertSerial  = tlv(0x82, intToUnsigned(issuerSerialInt));
+  const aki_value = SEQ(authorityCertIssuer, authorityCertSerial);
   const ext_aki = SEQ(OID_DER(OID.AKI), OCTET_STRING(aki_value));
 
+  // Extensions контейнер в TBSCertificate
   const extensions = tlv(0xA3, SEQ(ext_ski, ext_ku, ext_bc, ext_aki));
-  console.log('extensions', extensions)
+
   // TBS
-  const version = tlv(0xA0, INTEGER(2n));
+  const version = tlv(0xA0, INTEGER(2n)); // v3
   const serial  = INTEGER(serialNumber!=null ? BigInt(String(serialNumber)) : randomSerial());
   const sigAlg = SEQ(OID_DER(OID.SIGNWITHDIGEST_256));
+
   const tbs = SEQ(version, serial, sigAlg, issuerNameTLV, validity, subjectName, spki, extensions);
-  console.log('tbs', tbs)
-  // Подпись TBS
+
+  // Подпись TBS (ГОСТ: e — LE-интерпретация хэша)
   const h = await Promise.resolve(streebog256(tbs));
   if (h.length!==32) throw new Error("streebog256 must return 32 bytes");
-  const e = bytesToBigInt(h.slice().reverse()) || 1n;   // LE int (ГОСТ)
+  const e = bytesToBigInt(h.slice().reverse()) || 1n;
   const dIssuer = BigInt("0x"+issuerPrivateKeyHex.replace(/^0x/,""));
   const { r, s } = await Promise.resolve(gost3410_2012_256_sign(e, dIssuer, curve));
-  const sigBytes = concat(bigIntToBE(s,32), bigIntToBE(r,32)); // s||r
 
+  // signatureValue: BIT STRING с "сырыми" 64 байтами подписи; порядок/эндиян — как в твоём генераторе (s||r, BE)
+  const sigBytes = concat(bigIntToBE(s,32), bigIntToBE(r,32));
   const cert = SEQ(tbs, sigAlg, BIT_STRING(sigBytes, 0));
   const pem  = derToPem(cert, "CERTIFICATE");
-  return { der: cert, pem, tbs,
+
+  return {
+    der: cert,
+    pem,
+    tbs,
     subjectPrivHex: subjectPrivateKeyHex ? undefined : dSub.toString(16).padStart(64,"0"),
-    subjectPubQxHex: subjectPublicQxHex!, subjectPubQyHex: subjectPublicQyHex! };
+    subjectPubQxHex: subjectPublicQxHex!, subjectPubQyHex: subjectPublicQyHex!
+  };
 }
