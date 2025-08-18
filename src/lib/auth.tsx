@@ -10,7 +10,7 @@ import { log } from "@/lib/logger";
 
 export async function getCurrentUser() {
   const session = await getSession();
-  console.log('asdadasdasdasASDASDASDAS')
+  
   if (!session?.user?.email) return null;
   return prisma.user.findUnique({ 
     where: { email: session.user.email }});
@@ -26,7 +26,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        console.log('sdad ');
+
         if (!credentials?.email || !credentials.password) return null;
 
         const user = await prisma.user.findUnique({ 
@@ -48,7 +48,7 @@ export const authOptions: NextAuthOptions = {
             }
           }
         }})
-        console.log(user)
+
         if (!user?.passwordHash) return null;
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);

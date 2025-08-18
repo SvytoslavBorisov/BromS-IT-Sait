@@ -16,19 +16,24 @@ export async function GET(req: Request) {
     where: { id: userId },
     include: {
         company: { 
-        select: {
-            id: true, title: true
-        }
+          select: {
+              id: true, title: true
+          }
         },
         department: { 
-        select: {
-            id: true, title: true
-        }
+          select: {
+              id: true, title: true
+          }
         },
         manager: {
-        select: {
-            id: true, name: true
-        }
+          select: {
+              id: true, name: true
+          }
+        },
+        position: {
+          select: {
+              id: true, title: true
+          }
         }
     }
   });

@@ -3,18 +3,37 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import { Card, CardHeader, CardContent } from "@/components/ui/cards";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Maybe<T> = T | undefined | null;
+
+interface LogEntry {
+  userId: string;
+  timestamp: string;
+  level: string;
+  event: string;
+  message?: string;
+}
 
 type Me = {
   name?: string;
   surname?: string;
   email?: string;
   image?: string;
-  companyId?: string;
-  departmentId?: string;
-  positionId?: string;
-  // добавь поля, что реально возвращает /api/me
+  company?: {
+    id: string;
+    title: string;
+  };
+  department?: {
+    id: string;
+    title: string;
+  };
+  position?: {
+    id: string;
+    title: string;
+  };
+  // другие поля, которые реально возвращает /api/me
 };
 
 function initials(name?: string, surname?: string) {
@@ -53,7 +72,27 @@ export default function ProfileDetails() {
   const [meLoading, setMeLoading] = useState(false);
   const [meError, setMeError] = useState<string | null>(null);
 
-  // грузим /api/me только когда пользователь авторизован
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/logs")
+      .then((res) => {
+        if (!res.ok) throw new Error(`Ошибка ${res.status}`);
+        return res.json();
+      })
+      .then((data: LogEntry[]) => {
+        setLogs(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        setError(err.message);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+
   useEffect(() => {
     if (status !== "authenticated") return;
     const ctrl = new AbortController();
@@ -97,7 +136,7 @@ export default function ProfileDetails() {
 
   // объединяем session.user и данные из API
   const user: any = useMemo(() => ({ ...(session?.user ?? {}), ...(me ?? {}) }), [session?.user, me]);
-
+  console.log(me, user)
   const name = user.name ?? "";
   const surname = user.surname ?? "";
   const fullName = [name, surname].filter(Boolean).join(" ") || "Без имени";
@@ -106,7 +145,7 @@ export default function ProfileDetails() {
 
   return (
     <section className="w-full mx-auto">
-      <div className="relative overflow-hidden rounded-2xl bg-white shadow ring-1 ring-black/5">
+      <div className="relative overflow-hidden bg-white shadow ring-1 ring-black/5">
         {/* Баннер */}
         <div className="relative h-40 sm:h-56 bg-gradient-to-r from-sky-500 to-blue-600">
           {bannerUrl && (
@@ -136,13 +175,95 @@ export default function ProfileDetails() {
           {meError && <p className="mt-4 text-sm text-red-600">Ошибка: {meError}</p>}
 
           <div className="mt-6 grid grid-cols-1 gap-4">
-            <InfoRow label="E‑mail" value={user.email} href={user.email ? `mailto:${user.email}` : undefined} />
-            <InfoRow label="Компания" value={user.companyId} />
-            <InfoRow label="Отдел" value={user.department} />
-            <InfoRow label="Должность" value={user.position || user.role} />
+            <InfoRow label="E‑mail" value={user!.email} href={user!.email ? `mailto:${user!.email}` : undefined} />
+            <InfoRow label="Компания" value={me?.company?.title} />
+            <InfoRow label="Отдел" value={me?.department?.title} />
+            <InfoRow label="Должность" value={me?.position?.title} />
             <InfoRow label="Телефон" value={user.phone} href={user.phone ? `tel:${user.phone}` : undefined} />
             <InfoRow label="Локация" value={user.location} />
           </div>
+        </div>
+
+        <div className="px-6 pt-16 pb-6 sm:px-8">
+          <h2 className=" font-semibold text-gray-900">Последняя активность</h2>
+          <CardContent>
+              {loading && <p>Загрузка...</p>}
+              {error && <p className="text-red-500">Ошибка: {error}</p>}
+
+              {!loading && !error && (
+                <ScrollArea className="h-64">
+                  <table className="w-full text-left table-auto">
+                    <thead>
+                      <tr>
+                        <th className="px-2 py-1">Дата/Время</th>
+                        <th className="px-2 py-1">Уровень</th>
+                        <th className="px-2 py-1">Событие</th>
+                        <th className="px-2 py-1">Сообщение</th>
+                      </tr>
+                    </thead>
+                  <tbody>
+                    {logs.map((log, idx) => (
+                      log.userId === session?.user.id && (
+                        <tr key={idx} className="odd:bg-gray-50">
+                          <td className="px-2 py-1 align-top text-xs">
+                            {new Date(log.timestamp).toLocaleString("ru-RU")}
+                          </td>
+                          <td className="px-2 py-1 align-top text-xs font-medium">
+                            {log.level}
+                          </td>
+                          <td className="px-2 py-1 align-top text-xs">{log.event}</td>
+                          <td className="px-2 py-1 align-top text-xs">
+                            {log.message || "-"}
+                          </td>
+                        </tr>
+                      )
+                    ))}
+                  </tbody>
+                  </table>
+                </ScrollArea>
+              )}
+            </CardContent>
+        </div>
+
+        <div className="px-6 pt-16 pb-6 sm:px-8">
+          <h2 className=" font-semibold text-gray-900">Запросы к</h2>
+          <CardContent>
+              {loading && <p>Загрузка...</p>}
+              {error && <p className="text-red-500">Ошибка: {error}</p>}
+
+              {!loading && !error && (
+                <ScrollArea className="h-64">
+                  <table className="w-full text-left table-auto">
+                    <thead>
+                      <tr>
+                        <th className="px-2 py-1">Дата/Время</th>
+                        <th className="px-2 py-1">Уровень</th>
+                        <th className="px-2 py-1">Событие</th>
+                        <th className="px-2 py-1">Сообщение</th>
+                      </tr>
+                    </thead>
+                  <tbody>
+                    {logs.map((log, idx) => (
+                      log.userId === session?.user.id && (
+                        <tr key={idx} className="odd:bg-gray-50">
+                          <td className="px-2 py-1 align-top text-xs">
+                            {new Date(log.timestamp).toLocaleString("ru-RU")}
+                          </td>
+                          <td className="px-2 py-1 align-top text-xs font-medium">
+                            {log.level}
+                          </td>
+                          <td className="px-2 py-1 align-top text-xs">{log.event}</td>
+                          <td className="px-2 py-1 align-top text-xs">
+                            {log.message || "-"}
+                          </td>
+                        </tr>
+                      )
+                    ))}
+                  </tbody>
+                  </table>
+                </ScrollArea>
+              )}
+            </CardContent>
         </div>
       </div>
     </section>

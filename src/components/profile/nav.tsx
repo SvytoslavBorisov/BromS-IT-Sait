@@ -4,10 +4,9 @@ import { ReactNode } from "react";
 
 export type Tab =
   | "profile"
+  | "storage"
   | "keys"
-  | "all_keys"
   | "process"
-  | "documents"
   | "security"
   | "settings";
 
@@ -30,6 +29,16 @@ export const NAV: Record<
   }
 > = {
   profile: { label: "Профиль", icon: "👤"  },
+  storage: { 
+    label: "Хранилище",
+     icon: "🗃️",
+    children: [
+      { id: "storage.keys", label: "Ключи" },
+      { id: "storage.shares", label: "Доли" },
+      { id: "storage.certs", label: "Сертификаты" },
+      { id: "storage.docs", label: "Документы" },
+    ],
+    },
   keys: {
     label: "Ваши ключи",
     icon: "🔑",
@@ -37,14 +46,6 @@ export const NAV: Record<
       { id: "keys.list", label: "Список" },
       { id: "keys.create", label: "Создать" },
       { id: "keys.import", label: "Импорт" },
-    ],
-  },
-  all_keys: {
-    label: "Все ключи",
-    icon: "🔑",
-    children: [
-      { id: "all_keys.search", label: "Поиск" },
-      { id: "all_keys.audit", label: "Аудит" },
     ],
   },
   process: {
@@ -55,16 +56,9 @@ export const NAV: Record<
       { id: "process.history", label: "История" },
     ],
   },
-  documents: {
-    label: "Документы",
-    icon: "📄",
-    children: [
-      { id: "documents.inbox", label: "Входящие" },
-      { id: "documents.outbox", label: "Исходящие" },
-      { id: "documents.templates", label: "Шаблоны" },
-    ],
-  },
-  security: { label: "Журнал безопасности", icon: "📄"},
+  security: { 
+    label: "Журнал безопасности", 
+    icon: "📄"},
   settings: {
     label: "Настройки",
     icon: "⚙️",

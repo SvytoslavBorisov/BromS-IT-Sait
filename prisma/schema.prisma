@@ -75,6 +75,7 @@ model User {
   notification    Notification[]     @relation("userNotification")
   sendReceipts    ShareReceipt[]     @relation("sendReceipts")
   documents       Document[]         @relation("usersDocuments")
+  certifications       Certification[]         @relation("userCertificats")
   documentSignSession       documentSignSession[]         @relation("documentSignSessionDealer")
 
   companyId       String?   
@@ -312,7 +313,7 @@ model Department {
 
 model Position {
   id          String    @id @default(cuid())
-  title       String    @default("Компания")
+  title       String    @default("Должность")
   
   companyId   String
   company     Company   @relation("companyPositions", fields: [companyId], references: [id])
@@ -321,6 +322,15 @@ model Position {
 
   rank        Int       @default(100)
 }
+
+model Certification {
+  id          String    @id @default(cuid())
+  title       String    @default("Сертификат")
+
+  ownerId     String
+  owner       User   @relation("userCertificats", fields: [ownerId], references: [id])
+}
+
 
 //
 //   ENUMS

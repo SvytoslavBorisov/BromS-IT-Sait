@@ -20,9 +20,8 @@ import { Dispatch, SetStateAction } from "react";
 
 const DEFAULT_SUBTAB: Partial<Record<Tab, SubtabId>> = {
   keys: "keys.list",
-  all_keys: "all_keys.search",
+  storage: "storage.keys",
   process: "process.active",
-  documents: "documents.inbox",
   settings: "settings.profile",
 };
 
@@ -58,9 +57,8 @@ export default function ProfilePage() {
   // Хендлеры просто меняют URL — НИКАКОГО локального setState
   const DEFAULT_SUBTAB: Partial<Record<Tab, SubtabId>> = {
     keys: "keys.list",
-    all_keys: "all_keys.search",
+    storage: "storage.keys",
     process: "process.active",
-    documents: "documents.inbox",
     settings: "settings.profile",
   };
 
@@ -103,13 +101,19 @@ export default function ProfilePage() {
             return <div>Здесь импорт ключа</div>;
         }
 
-      case "all_keys":
+      case "storage":
         switch (activeSubtab) {
-          case "all_keys.search":
+          case "storage.keys":
+            return <RecoverList />;
+          case "storage.shares":
+            return <MyShares />;
+          case "storage.certs":
+            return <div>Здесь будут все ваши сертификаты</div>;
+          case "storage.docs":
+            return <DocumentsPage />;
           default:
             return <RecoverList />;
-          case "all_keys.audit":
-            return <div>Здесь аудит всех ключей</div>;
+          
         }
 
       case "process":
@@ -120,9 +124,6 @@ export default function ProfilePage() {
           case "process.history":
             return <div>История процессов</div>;
         }
-
-      case "documents":
-        return <DocumentsPage />;
 
       case "security":
         return <Security />;
@@ -155,7 +156,7 @@ export default function ProfilePage() {
             <Badge count={unreadCount} />
             <button
               onClick={() => signOut({ callbackUrl: "/auth/login" })}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
             >
               Выйти
             </button>
