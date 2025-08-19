@@ -7,7 +7,9 @@ export default function ContactSection() {
   return (
     <section id="contact" className="relative w-full bg-white min-h-screen md:min-h-[500px] md:h-auto flex items-center justify-center md:py-16">
 
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent from-99% to-[rgb(5,5,5)]" />
+      <div
+        className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-transparent from-99% to-[rgb(5,5,5)]"
+      />
 
       <div className="w-full px-4 sm:px-6 lg:px-8">
         {/* flex-col on mobile, flex-row on md+ */}

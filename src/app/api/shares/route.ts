@@ -1,158 +1,178 @@
 // src/app/api/shares/route.ts
-
-import { NextResponse }     from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions }       from "@/lib/auth";
-import { prisma }           from "@/lib/prisma";
-import { log }              from "@/lib/logger";
-import { generateGostKeyPair } from "@/lib/crypto/gost3410"
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { logger, ensureRequestId } from "@/lib/logger";
 
-export async function POST(request: Request) {
-  // 1) Авторизация
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    log({ event: "shares_create_unauthorized" });
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export const runtime = "nodejs";
 
-  console.log('BIOFAWGBFIUAWBFIWUABDF');
+type ShareInput = {
+  recipientId: string;
+  x: string;
+  ciphertext: number[];
+  status: "ACTIVE" | "USED" | "EXPIRED";
+  comment: string;
+  encryptionAlgorithm: string;
+  expiresAt: string | null;
+};
 
-  // 2) Парсим тело VSS-параметров
-  const {
-    p,
-    q,
-    g,
-    p_as_key,
-    a_as_key,
-    b_as_key,
-    m_as_key,
-    q_as_key,
-    xp_as_key,
-    yp_as_key,
-    Q_as_key,
-    commitments,
-    title,
-    threshold,
-    type,
-    publicKey,
-    shares,
-  } = (await request.json()) as {
-    p: string;
-    q: string;
-    g: string;
-    p_as_key: string;
-    a_as_key: string;
-    b_as_key: string;
-    m_as_key: string;
-    q_as_key: string;
-    xp_as_key: string;
-    yp_as_key: string;
-    Q_as_key: string;
-    commitments: string[];
-    title: string,
-    threshold: number;
-    type: "CUSTOM" |"ASYMMETRIC";
-    publicKey: string;
-    shares: Array<{
-      recipientId:         string;
-      x:                   string;
-      ciphertext:          number[];
-      status:              "ACTIVE" | "USED" | "EXPIRED";
-      comment:             string;
-      encryptionAlgorithm: string;
-      expiresAt:           string | null;
-    }>;
-  };
+type Body = {
+  p: string;
+  q: string;
+  g: string;
+  // параметры для ASYMMETRIC-ключа
+  p_as_key?: string;
+  a_as_key?: string;
+  b_as_key?: string;
+  m_as_key?: string;
+  q_as_key?: string;
+  xp_as_key?: string;
+  yp_as_key?: string;
+  Q_as_key?: string;
 
-  let vssSession;
-  // 3) Создаём новую VSS-сессию в БД
-  if (type == 'ASYMMETRIC') {
+  commitments: string[];
+  title: string;
+  threshold: number;
+  type: "CUSTOM" | "ASYMMETRIC";
+  publicKey?: string;
+  shares: ShareInput[];
+};
 
-    vssSession = await prisma.shamirSession.create({
-      data: {
-        dealerId:   session.user.id,
-        p,
-        q,
-        g,
-        commitments,
-        threshold,
-        type: 'ASYMMETRIC',
-        title
-      },
+export async function POST(req: NextRequest) {
+  const t0 = Date.now();
+  const requestId = ensureRequestId(req.headers.get("x-request-id"));
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ua = req.headers.get("user-agent") || "unknown";
+  const log = logger.child({ requestId, module: "api/shares" });
+
+  try {
+    // 1) Авторизация
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      log.warn({ event: "vss.create_failed", reason: "unauthorized", ip, ua });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "x-request-id": requestId } });
+    }
+    const dealerId = session.user.id;
+
+    // 2) Парсим тело
+    let body: Body;
+    try {
+      body = await req.json();
+    } catch {
+      log.warn({ event: "vss.create_failed", reason: "bad_json", userId: dealerId, ip, ua });
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: { "x-request-id": requestId } });
+    }
+
+    const {
+      p, q, g,
+      p_as_key, a_as_key, b_as_key, q_as_key, xp_as_key, yp_as_key, Q_as_key,
+      commitments, title, threshold, type, publicKey, shares,
+    } = body;
+
+    // 3) Валидация базовых полей
+    if (!p || !q || !g || !Array.isArray(commitments) || !title || !threshold || !type || !Array.isArray(shares)) {
+      log.warn({ event: "vss.create_failed", reason: "validation_error", userId: dealerId });
+      return NextResponse.json({ error: "Invalid params" }, { status: 400, headers: { "x-request-id": requestId } });
+    }
+
+    if (type === "ASYMMETRIC" && (!publicKey || !p_as_key || !a_as_key || !b_as_key || !q_as_key || !xp_as_key || !yp_as_key || !Q_as_key)) {
+      log.warn({ event: "vss.create_failed", reason: "missing_asymmetric_params", userId: dealerId });
+      return NextResponse.json({ error: "Missing asymmetric key params" }, { status: 400, headers: { "x-request-id": requestId } });
+    }
+
+    log.info({
+      event: "vss.create_start",
+      userId: dealerId,
+      type,
+      threshold,
+      sharesCount: shares.length,
+      ip,
+      ua,
     });
 
-    await prisma.asymmetricKey.create({
+    // 4) Создаём VSS-сессию
+    const vssSession = await prisma.shamirSession.create({
       data: {
-        privateKeySharingId:   vssSession.id,
-        publicKey: publicKey,
-        p: p_as_key,
-        a:  a_as_key,
-        b: b_as_key,
-        m: m_as_key,
-        q: q_as_key,
-        xp: xp_as_key,
-        yp: yp_as_key,
-        Q: Q_as_key
-      },
-    });
-
-  }
-  else {
-
-    vssSession = await prisma.shamirSession.create({
-      data: {
-        dealerId:   session.user.id,
-        p,
-        q,
-        g,
+        dealerId,
+        p, q, g,
         commitments,
         threshold,
         title,
-        type: 'CUSTOM'
+        type,
       },
     });
 
-  };
+    // 5) Если ASYMMETRIC — сохраняем параметры ключа
+    if (type === "ASYMMETRIC") {
+      await prisma.asymmetricKey.create({
+        data: {
+          privateKeySharingId: vssSession.id,
+          publicKey: publicKey!, // уже проверили
+          p: p_as_key!,
+          a: a_as_key!,
+          b: b_as_key!,
+          q: q_as_key!,
+          xp: xp_as_key!,
+          yp: yp_as_key!,
+          Q: Q_as_key!,
+        },
+      });
+    }
 
-  log({
-    event:      "vss_session_created",
-    dealerId:   session.user.id,
-    sessionId:  vssSession.id,
-    p,
-    q,
-    g,
-    commitments,
-    threshold,
-    timestamp:  new Date().toISOString(),
-  });
+    // 6) Сохраняем все доли
+    if (shares.length > 0) {
+      await prisma.share.createMany({
+        data: shares.map((s) => ({
+          sessionId: vssSession.id,
+          userId: s.recipientId,
+          x: s.x,
+          ciphertext: s.ciphertext,
+          status: s.status,
+          comment: s.comment,
+          encryptionAlgorithm: s.encryptionAlgorithm,
+          expiresAt: s.expiresAt ? new Date(s.expiresAt) : null,
+        })),
+      });
 
-  // 4) Сохраняем все зашифрованные доли с новыми полями
-  await prisma.share.createMany({
-    data: shares.map((s) => ({
-      sessionId:           vssSession.id,
-      userId:              s.recipientId,
-      x:                   s.x,
-      ciphertext:          s.ciphertext,            // Prisma JSON поддерживает массивы
-      status:              s.status,
-      comment:             s.comment,
-      encryptionAlgorithm: s.encryptionAlgorithm,
-      expiresAt:           s.expiresAt ? new Date(s.expiresAt) : null,
-    })),
-  });
+      // детальные логи по долям — info
+      for (const s of shares) {
+        log.info({
+          event: "vss.share_saved",
+          sessionId: vssSession.id,
+          recipient: s.recipientId,
+          x: s.x,
+          status: s.status,
+          userId: dealerId,
+        });
+      }
+    }
 
-  // 5) Логируем каждую долю
-  shares.forEach((s) =>
-    log({
-      event:      "vss_share_saved",
-      sessionId:  vssSession.id,
-      recipient:  s.recipientId,
-      x:          s.x,
-      status:     s.status,
-      comment:    s.comment,
-      timestamp:  new Date().toISOString(),
-    })
-  );
+    log.info({
+      event: "vss.create_success",
+      sessionId: vssSession.id,
+      userId: dealerId,
+      type,
+      threshold,
+      sharesCount: shares.length,
+      latencyMs: Date.now() - t0,
+    });
 
-  return NextResponse.json({ ok: true, sessionId: vssSession.id });
+    return NextResponse.json(
+      { ok: true, sessionId: vssSession.id, requestId },
+      { headers: { "x-request-id": requestId } }
+    );
+  } catch (err) {
+    const e = err as Error;
+    logger.child({ requestId, module: "api/shares" }).error({
+      event: "vss.create_failed",
+      reason: "exception",
+      message: e.message,
+      stack: e.stack,
+    });
+    return NextResponse.json(
+      { error: "Internal error", requestId },
+      { status: 500, headers: { "x-request-id": requestId } }
+    );
+  }
 }
- 

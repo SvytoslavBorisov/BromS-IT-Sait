@@ -1,28 +1,38 @@
-// src/app/api/auth/register/route.tsx
+// src/app/api/auth/register/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Sex } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-/**
- * GET /api/auth/register
- * Просто для проверки: возвращает подсказку, как правильно использовать эндпоинт.
- */
 export async function GET() {
   return NextResponse.json(
-    { message: "Чтобы зарегистрировать пользователя, сделайте POST с JSON { email, password }" },
+    { message: "POST { email, password, publicKey, name?, surname?, patronymic?, age? (YYYY-MM-DD), sex? (MALE|FEMALE), image?, managerId?, companyId?, positionId?, departmentId?, publicKeyFingerprint? }" },
     { status: 200 }
   );
 }
 
-/**
- * POST /api/auth/register
- * Ожидает { email, password }, проверяет на существование, хеширует пароль, создаёт запись.
- */
 export async function POST(request: Request) {
   try {
-    const { name, email, password } = await request.json();
+    const body = await request.json();
+
+    const {
+      email,
+      password,
+      name,
+      surname,
+      patronymic,
+      age,                  // 'YYYY-MM-DD'
+      sex,
+      image,
+      managerId,
+      companyId,
+      positionId,
+      departmentId,
+
+      publicKey,            // ОТ КЛИЕНТА: публичный JWK (объект)
+      publicKeyFingerprint, // опционально
+    } = body ?? {};
 
     if (!email || !password) {
       return NextResponse.json(
@@ -30,8 +40,14 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    if (!publicKey) {
+      return NextResponse.json(
+        { error: "Отсутствует publicKey. Ключевая пара должна генерироваться на клиенте" },
+        { status: 400 }
+      );
+    }
 
-    // Проверяем, нет ли уже такого пользователя
+    // Проверка существования
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json(
@@ -40,17 +56,69 @@ export async function POST(request: Request) {
       );
     }
 
-    // Хешируем пароль
+    // Пароль -> hash
     const passwordHash = await hash(password, 10);
 
-    // Создаём нового пользователя
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        passwordHash,
-      },
-    });
+    // Приведение даты
+    let ageDate: Date | undefined = undefined;
+    if (age) {
+      const d = new Date(age);
+      if (isNaN(d.getTime())) {
+        return NextResponse.json(
+          { error: "Поле age должно быть корректной датой (например, 1999-12-31)" },
+          { status: 400 }
+        );
+      }
+      ageDate = d;
+    }
+
+    // Валидируем sex
+    let sexEnum: Sex | undefined = undefined;
+    if (sex !== undefined && sex !== null) {
+      const upper = String(sex).toUpperCase();
+      if (upper !== "MALE" && upper !== "FEMALE") {
+        return NextResponse.json(
+          { error: "Поле sex должно быть 'MALE' или 'FEMALE'" },
+          { status: 400 }
+        );
+      }
+      sexEnum = upper as Sex;
+    }
+
+    // publicKey должен быть объектом
+    if (typeof publicKey !== "object") {
+      return NextResponse.json(
+        { error: "publicKey должен быть объектом JWK" },
+        { status: 400 }
+      );
+    }
+
+    // (опционально) быстрая sanity‑проверка JWK
+    // например, требуем kty
+    if (!publicKey.kty) {
+      return NextResponse.json(
+        { error: "Некорректный JWK: отсутствует поле kty" },
+        { status: 400 }
+      );
+    }
+
+    const data: any = {
+      email,
+      passwordHash,
+      publicKey, // Prisma.Json
+      ...(name ? { name } : {}),
+      ...(surname !== undefined ? { surname } : {}),
+      ...(patronymic !== undefined ? { patronymic } : {}),
+      ...(ageDate ? { age: ageDate } : {}),
+      ...(sexEnum ? { sex: sexEnum } : {}),
+      ...(image ? { image } : {}),
+      ...(managerId ? { managerId } : {}),
+      ...(companyId ? { companyId } : {}),
+      ...(positionId ? { positionId } : {}),
+      ...(departmentId ? { departmentId } : {}),
+    };
+
+    const user = await prisma.user.create({ data });
 
     return NextResponse.json(
       { id: user.id, email: user.email },

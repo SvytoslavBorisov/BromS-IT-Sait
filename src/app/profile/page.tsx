@@ -14,8 +14,6 @@ import ProfileProcesses from "@/components/profile/Process";
 import RecoverList      from "@/components/profile/RecoverList";
 import CreateShares      from "@/components/CreateShares";
 import DocumentsPage    from "@/components/profile/Documents";
-import { Badge } from "@/components/ui/badge_notif";
-import { useNotifications } from "@/hooks/useNotifications";
 import { Dispatch, SetStateAction } from "react";
 
 const DEFAULT_SUBTAB: Partial<Record<Tab, SubtabId>> = {
@@ -28,9 +26,6 @@ const DEFAULT_SUBTAB: Partial<Record<Tab, SubtabId>> = {
 export default function ProfilePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
-
-  const notifs = useNotifications();
-  const unreadCount = notifs.filter(n => !n.isRead).length;
 
   const sp = useSearchParams();
   const activeTab = (sp?.get("tab") || "profile") as Tab;
@@ -152,16 +147,6 @@ export default function ProfilePage() {
         setActiveSubtab={setActiveSubtabDispatch}
       />
         <div className="flex-1 ml-16">
-          <div className="absolute right-0 justify-between items-center mb-6 z-1">
-            <Badge count={unreadCount} />
-            <button
-              onClick={() => signOut({ callbackUrl: "/auth/login" })}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              Выйти
-            </button>
-          </div>
-
           {isLoading ? <div>Загрузка...</div> : renderContent()}
         </div>
     </div>

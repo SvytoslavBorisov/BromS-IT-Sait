@@ -77,7 +77,8 @@ model User {
   documents       Document[]         @relation("usersDocuments")
   certifications       Certification[]         @relation("userCertificats")
   documentSignSession       documentSignSession[]         @relation("documentSignSessionDealer")
-
+  signatures       Signatures[]         @relation("usersSignatures")
+  settings         UserSettings?         @relation()
   companyId       String?   
   company         Company?         @relation("userCompany", fields: [companyId], references: [id])
   positionId      String?         
@@ -91,6 +92,22 @@ model User {
   managerId      String?            // ссылка на руководителя
   manager        User?              @relation("UserHierarchy", fields: [managerId], references: [id])
   reports        User[]             @relation("UserHierarchy")
+}
+
+model UserSettings {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+
+  twoFactorEnabled Boolean  @default(false)
+  notifyByEmail    Boolean  @default(true)
+  notifyByTelegram Boolean  @default(false)
+  logRetentionDays Int      @default(30)
+  autoSessionLogout Int     @default(15)   // минут
+  darkMode         Boolean  @default(false)
+  language         String   @default("ru")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model VerificationToken {
@@ -168,7 +185,6 @@ model AsymmetricKey {
   p                    String          // простое число модуля поля
   a                    String          // коэффициент a кривой
   b                    String          // коэффициент b кривой
-  m                    String          // порядок поля
   q                    String          // порядок группы точек ЭК
 
   /// Генератор G = (xp, yp)
@@ -264,6 +280,7 @@ model Document {
   type        DocumentStatus? @default(NOTECRYPT)
 
   documentSignSession    documentSignSession[]    @relation("documentIdSignSession")
+  documentSignatures     Signatures[]    @relation("documentIdSignatures")
 
   @@map("documents")
   @@index([userId, createdAt])
@@ -289,6 +306,15 @@ model documentSignSession {
   recovery RecoverySession @relation("documentSignSessionRecovery", fields:[recoveryId], references:[id])
 }
 
+model Signatures {
+  id          String    @id @default(cuid())
+
+  documentId        String
+  document          Document         @relation("documentIdSignatures", fields:[documentId], references:[id])
+
+  userId      String
+  user        User      @relation("usersSignatures", fields: [userId], references: [id])
+}
 
 model Company {
   id          String    @id @default(cuid())

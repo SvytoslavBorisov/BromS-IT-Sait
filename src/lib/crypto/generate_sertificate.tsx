@@ -199,6 +199,24 @@ function defaultRng(n:number){
   return require("crypto").randomBytes(n);
 }
 
+const OID_CDP = "2.5.29.31";
+function extCRLDistributionPoints(uri: string) {
+  const gnURI = tlv(0x86, asciiBytes(uri));          // uniformResourceIdentifier
+  const fullName = tlv(0xA0, SEQ(gnURI));            // [0] GeneralNames
+  const dp = SEQ(fullName);                          // DistributionPoint
+  const dpSeq = SEQ(dp);                             // SEQUENCE OF
+  return SEQ(OID_DER(OID_CDP), OCTET_STRING(dpSeq)); // extnValue = OCTET STRING(...)
+}
+
+// --- AIA (1.3.6.1.5.5.7.1.1): AccessDescription = SEQ{ OID(ocsp), GeneralName(URI) }
+const OID_AIA = "1.3.6.1.5.5.7.1.1";
+const OID_PKIX_OCSP = "1.3.6.1.5.5.7.48.1";
+function extAuthorityInfoAccessOcsp(uri: string) {
+  const ad = SEQ(OID_DER(OID_PKIX_OCSP), tlv(0x86, asciiBytes(uri))); // accessMethod + accessLocation
+  const aiaSeq = SEQ(ad);                                             // SEQUENCE OF
+  return SEQ(OID_DER(OID_AIA), OCTET_STRING(aiaSeq));
+}
+
 /* маленький SHA-1 для SKI (как в python-версии) */
 function sha1(msg: Uint8Array): Uint8Array {
   const w=new Uint32Array(80); const ml=msg.length*8;

@@ -22,10 +22,18 @@ export async function DELETE(
       where: { shareSessionId: recoverySessionId },
     });
 
+    // await prisma.share.deleteMany({
+    //   where: { session: res?.id },
+    // });
+
     await prisma.shareReceipt.deleteMany({
       where: { recoveryId: res?.id },
     });
       
+    await prisma.documentSignSession.deleteMany({
+      where: { recoveryId: res?.id },
+    });
+
     await prisma.recoverySession.deleteMany({
       where: { id: res?.id },
     });

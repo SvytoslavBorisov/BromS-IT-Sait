@@ -8,6 +8,8 @@ export default function ContactForm() {
     email: "",
     message: "",
   });
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -15,76 +17,94 @@ export default function ContactForm() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: здесь ваш API-запрос
-    console.log("Отправлено:", formData);
+    setLoading(true);
+    setStatus(null);
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) {
+        setStatus(data?.error || "Ошибка при отправке ❌");
+        return;
+      }
+      setStatus("Сообщение успешно отправлено ✅");
+    } catch (err) {
+      setStatus("Ошибка сети ❌");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <label
-          htmlFor="name"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          Имя
-        </label>
-        <input
-          type="text"
-          name="name"
-          id="name"
-          required
-          value={formData.name}
-          onChange={handleChange}
-          className="block w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
+    <div className="max-w-lg mx-auto p-8 bg-white rounded-2xl shadow-lg">
+      <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+        Свяжитесь с нами
+      </h2>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label className="block text-sm font-medium text-gray-600 mb-1">
+            Имя
+          </label>
+          <input
+            type="text"
+            name="name"
+            required
+            value={formData.name}
+            onChange={handleChange}
+            className="w-full rounded-lg border px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="Введите ваше имя"
+          />
+        </div>
 
-      <div>
-        <label
-          htmlFor="email"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          Электронная почта
-        </label>
-        <input
-          type="email"
-          name="email"
-          id="email"
-          required
-          value={formData.email}
-          onChange={handleChange}
-          className="block w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-600 mb-1">
+            Электронная почта
+          </label>
+          <input
+            type="email"
+            name="email"
+            required
+            value={formData.email}
+            onChange={handleChange}
+            className="w-full rounded-lg border px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="you@example.com"
+          />
+        </div>
 
-      <div>
-        <label
-          htmlFor="message"
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
-          Сообщение
-        </label>
-        <textarea
-          name="message"
-          id="message"
-          rows={5}
-          required
-          value={formData.message}
-          onChange={handleChange}
-          className="block w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-600 mb-1">
+            Сообщение
+          </label>
+          <textarea
+            name="message"
+            rows={5}
+            required
+            value={formData.message}
+            onChange={handleChange}
+            className="w-full rounded-lg border px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="Напишите ваше сообщение..."
+          />
+        </div>
 
-      <div className="text-right">
         <button
           type="submit"
-          className="inline-block rounded-lg bg-blue-600 px-6 py-3 text-white font-medium hover:bg-blue-700 transition"
+          disabled={loading}
+          className="w-full rounded-lg bg-blue-600 px-6 py-3 text-white font-medium hover:bg-blue-700 transition disabled:opacity-50"
         >
-          Отправить
+          {loading ? "Отправка..." : "Отправить"}
         </button>
-      </div>
-    </form>
+      </form>
+
+      {status && (
+        <p className="mt-4 text-center text-sm text-gray-700">{status}</p>
+      )}
+    </div>
   );
 }

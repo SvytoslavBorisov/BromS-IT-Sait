@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
 
     // читаем файл и сертификат
     const fileBytes = new Uint8Array(await fs.readFile(absPath));
-    const certDer = await readCertAsDER("public/broms.cer");
+    const certDer = await readCertAsDER("public/1508.cer");
 
     // d в hex
     const privDHex = new TextDecoder().decode(bytes);
@@ -206,8 +206,8 @@ export async function POST(req: NextRequest) {
       const cmsDer = await buildCadesBesSignedData({
         content: fileBytes,                                    // ATTACHED
         certDer,
-        // privKeyHex: privDHex.startsWith("0x") ? privDHex.slice(2) : privDHex,
-        privKeyHex: 'f1f1205a8f0bab12aff2a5ed08296c9894686aa62ec0e131c20cafa71c59b9f1',
+        privKeyHex: privDHex.startsWith("0x") ? privDHex.slice(2) : privDHex,
+        // privKeyHex: 'f1f1205a8f0bab12aff2a5ed08296c9894686aa62ec0e131c20cafa71c59b9f1',
         curve: curveParams,
         streebog256,
         gost3410_2012_256_sign: gostSigner,
