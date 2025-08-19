@@ -6,7 +6,6 @@ const withTM = require('next-transpile-modules')([
 ]);
 
 
-
 const nextConfig: NextConfig = {
   /* config options here */
   eslint: {
@@ -18,6 +17,7 @@ const nextConfig: NextConfig = {
     // позволяeм сборке проходить, даже если есть ошибки TS
     ignoreBuildErrors: true,
   }
+
 };
 
 module.exports = withTM({
