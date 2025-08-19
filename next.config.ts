@@ -1,9 +1,11 @@
 const withTM = require('next-transpile-modules')(['gost-crypto']);
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+module.exports = {
   reactStrictMode: true,
-  eslint: { ignoreDuringBuilds: true },
-  typescript: { ignoreBuildErrors: true },
-  webpack: (config) => config, // ничего не трогаем
+  transpilePackages: ['gost-crypto'],
+  eslint: {
+    ignoreDuringBuilds: true, // ⬅️ ВАЖНО
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
 };
-module.exports = withTM(nextConfig);
