@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import CarouselClient from "@/app/main/CarouselClient";
+import CarouselClient from "@/app/CarouselClient";
 
 export default function ProjectsSection() {
   const [sections, setSections] = useState<string[]>([]);
