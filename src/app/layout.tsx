@@ -1,8 +1,5 @@
 "use client"; 
 
-import "@/styles/globals.css";
-import "@/styles/projects.css";
-import "@/styles/main.css";
 import { Providers } from "./providers";  // импортируем
 import type { ReactNode } from "react";
 import { Poppins } from "next/font/google";
