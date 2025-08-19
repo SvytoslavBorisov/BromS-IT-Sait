@@ -29,9 +29,7 @@ export async function POST(request: Request) {
       companyId,
       positionId,
       departmentId,
-
       publicKey,            // ОТ КЛИЕНТА: публичный JWK (объект)
-      publicKeyFingerprint, // опционально
     } = body ?? {};
 
     if (!email || !password) {
@@ -105,7 +103,7 @@ export async function POST(request: Request) {
     const data: any = {
       email,
       passwordHash,
-      publicKey, // Prisma.Json
+      publicKey,
       ...(name ? { name } : {}),
       ...(surname !== undefined ? { surname } : {}),
       ...(patronymic !== undefined ? { patronymic } : {}),

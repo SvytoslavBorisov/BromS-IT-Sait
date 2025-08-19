@@ -101,8 +101,10 @@ export default function SessionCard({
             className="rounded-2xl"
             aria-label="Начать восстановление"
           >
-            <Play className="mr-2 h-4 w-4" />
-            Восстановить
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+             <Play className="h-4 w-4" />
+             Восстановить
+            </span>
           </Button>
           <Button
             variant="secondary"
@@ -110,8 +112,10 @@ export default function SessionCard({
             className="rounded-2xl"
             aria-label="Подробнее"
           >
-            <ShieldCheck className="mr-2 h-4 w-4" />
-            Детали
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <ShieldCheck className="h-4 w-4" />
+              Детали
+            </span>
           </Button>
         </div>
       </CardContent>

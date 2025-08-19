@@ -18,19 +18,38 @@ export default function Sidebar({
   activeSubtab: SubtabId | null;
   setActiveSubtab: (s: SubtabId | null | ((p: SubtabId | null) => SubtabId | null)) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false);            // состояние панели (и для мобилы, и для десктопа)
   const [expandedTab, setExpandedTab] = useState<Tab | null>(null);
+  const [isMobile, setIsMobile] = useState(false);    // брейкпоинт < md
 
-  // задержки hover
+  // задержки hover (только для десктопа)
   const enterTimer = useRef<number | null>(null);
   const leaveTimer = useRef<number | null>(null);
   const OPEN_DELAY = 160;
   const CLOSE_DELAY = 120;
 
-  // высота подменю для плавного сворачивания/разворачивания
+  // высота подменю
   const submenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [submenuHeights, setSubmenuHeights] = useState<HeightMap>({});
   const [animatingCollapse, setAnimatingCollapse] = useState(false);
+
+  // определить мобильный режим по matchMedia
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767.98px)");
+    const apply = () => setIsMobile(mql.matches);
+    apply();
+    mql.addEventListener?.("change", apply);
+    return () => mql.removeEventListener?.("change", apply);
+  }, []);
+
+  // на мобиле при открытом меню блокируем скролл body
+  useEffect(() => {
+    if (!isMobile) return;
+    const cls = "overflow-hidden";
+    if (open) document.body.classList.add(cls);
+    else document.body.classList.remove(cls);
+    return () => document.body.classList.remove(cls);
+  }, [isMobile, open]);
 
   useLayoutEffect(() => {
     const next: HeightMap = {};
@@ -47,8 +66,11 @@ export default function Sidebar({
     enterTimer.current = null;
     leaveTimer.current = null;
   };
+  useEffect(() => () => clearTimers(), []);
 
+  // hover только для десктопа
   const onEnter = () => {
+    if (isMobile) return;
     if (leaveTimer.current) {
       window.clearTimeout(leaveTimer.current);
       leaveTimer.current = null;
@@ -57,22 +79,20 @@ export default function Sidebar({
       enterTimer.current = window.setTimeout(() => setOpen(true), OPEN_DELAY);
     }
   };
-
   const onLeave = () => {
+    if (isMobile) return;
     if (enterTimer.current) {
       window.clearTimeout(enterTimer.current);
       enterTimer.current = null;
     }
     if (!leaveTimer.current) {
       leaveTimer.current = window.setTimeout(() => {
-        // не сбрасываем expandedTab — чтобы при повторном наведении сохранить раскрытый раздел
         if (expandedTab) setAnimatingCollapse(true);
         setOpen(false);
       }, CLOSE_DELAY);
     }
   };
 
-  // когда меню уже свернуто и анимация прошла — снимаем флаг
   useEffect(() => {
     if (!open && animatingCollapse) {
       const t = window.setTimeout(() => setAnimatingCollapse(false), 320);
@@ -80,34 +100,36 @@ export default function Sidebar({
     }
   }, [open, animatingCollapse]);
 
-  useEffect(() => () => clearTimers(), []);
-
-  // ГЛАВНЫЙ КЛИК:
-  // 1) если меню закрыто — только раскрыть (без навигации и без выбора дефолтного саба);
-  // 2) если открыто и есть дети — раскрыть/свернуть подменю (без выбора дефолтного саба, контент не меняем);
-  // 3) если детей нет — обычная навигация.
+  // ГЛАВНЫЙ КЛИК
   const handleMainClick = (tab: Tab) => {
     const hasChildren = !!NAV[tab].children?.length;
 
-    if (!open) {
+    // Мобилка: если меню закрыто — просто открыть
+    if (isMobile && !open) {
       setOpen(true);
-      return; // ← не навигируем и не выбираем саб
+      return;
+    }
+
+    // Десктоп: если меню закрыто — открыть без навигации
+    if (!isMobile && !open) {
+      setOpen(true);
+      return;
     }
 
     if (hasChildren) {
       setExpandedTab((prev) => (prev === tab ? null : tab));
-      // НЕ устанавливаем first subtab — контент остаётся прежним
-      setActiveTab(tab); // визуально подсветим секцию
+      setActiveTab(tab);
       return;
     }
 
-    // без детей — навигируем
     setExpandedTab(null);
     setActiveSubtab(null);
     setActiveTab(tab);
+
+    // На мобиле по клику на пункт без детей — закрываем меню
+    if (isMobile) setOpen(false);
   };
 
-  // Чеврон раскрывает/сворачивает, тоже без выбора first subtab
   const toggleExpand = (tab: Tab) => {
     setExpandedTab((prev) => (prev === tab ? null : tab));
     setActiveTab(tab);
@@ -117,24 +139,78 @@ export default function Sidebar({
     "overflow-hidden whitespace-nowrap transition-[opacity] duration-300 " +
     (open ? "opacity-100" : "opacity-0");
 
+  // Кнопка-гамбургер (верхняя шапка) — только для мобилы
+  const MobileTopbar = () => (
+    <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-12 bg-white/95 backdrop-blur border-b flex items-center justify-between px-3">
+      <button
+        aria-label="Открыть меню"
+        className="h-9 w-9 rounded-md border flex items-center justify-center active:scale-95"
+        onClick={() => setOpen(true)}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
+          <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </button>
+      <div className="text-sm font-medium">Личный кабинет</div>
+      <div className="w-9" />
+    </div>
+  );
+
   return (
     <>
+      {/* Мобильная верхняя панель */}
+      <MobileTopbar />
+
+      {/* Затемнение для мобилы */}
+      {isMobile && open && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/40"
+          onClick={() => setOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      {/* Боковая панель:
+          - Мобилка: off‑canvas (translateX), ширина w-72
+          - Десктоп: твоя логика ширины w-16 / w-64 и hover */}
       <aside
         className={[
-          "fixed left-0 top-0 z-40 h-screen bg-white border-r shadow-xl",
-          "pointer-events-auto",
-          "transition-[width] duration-300 ease-out will-change-[width]",
-          open ? "w-64" : "w-16",
-          "flex flex-col",
+          "fixed left-0 top-0 z-50 h-screen bg-white border-r shadow-xl flex flex-col",
+          // мобильный off-canvas
+          "md:translate-x-0 md:transition-[width] md:duration-300 md:ease-out md:will-change-[width]",
+          isMobile
+            ? `w-72 transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"}`
+            : open
+            ? "w-64"
+            : "w-16",
+          // hover только на десктопе
+          !isMobile ? "pointer-events-auto" : "",
         ].join(" ")}
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
         aria-label="Sidebar"
       >
-        {/* Шапка */}
-        <div className="px-3 py-4 flex items-center">
-          <div className="h-8 w-8 rounded-md" />
-          <span className={["ml-3 text-sm font-medium", labelCls].join(" ")}>Личный кабинет</span>
+        {/* Шапка внутри панели (для десктопа видимая, для мобилы — тоже ок) */}
+        <div className="px-3 py-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="h-8 w-8 rounded-md bg-gray-100" />
+            <span className={["ml-3 text-sm font-medium hidden md:inline", labelCls].join(" ")}>
+              Личный кабинет
+            </span>
+          </div>
+
+          {/* Крестик закрыть — только мобилка */}
+          {isMobile && (
+            <button
+              aria-label="Закрыть меню"
+              className="h-8 w-8 rounded-md border flex items-center justify-center active:scale-95"
+              onClick={() => setOpen(false)}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+                <path d="M6 6l12 12M6 18L18 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Меню */}
@@ -144,7 +220,6 @@ export default function Sidebar({
             const hasChildren = !!NAV[tab].children?.length;
             const isExpanded = expandedTab === tab;
 
-            // вычисленная высота для анимации
             const subH = submenuHeights[tab] ?? 0;
             const submenuStyle: React.CSSProperties =
               isExpanded && open
@@ -155,7 +230,7 @@ export default function Sidebar({
 
             return (
               <div key={tab}>
-                {/* Линия меню — grid: [icon | label | chevron] без скачков */}
+                {/* Линия меню */}
                 <div
                   className={[
                     "w-full h-10 rounded-md transition-colors",
@@ -212,10 +287,10 @@ export default function Sidebar({
                   )}
                 </div>
 
-                {/* Подменю — ВСЕГДА смонтировано, но анимируем высоту (без скачков) */}
+                {/* Подменю */}
                 <div
                   ref={(el: HTMLDivElement | null) => {
-                    submenuRefs.current[tab] = el;  // ✅ возвращает void
+                    submenuRefs.current[tab] = el;
                   }}
                   style={submenuStyle}
                   className="overflow-hidden"
@@ -231,7 +306,10 @@ export default function Sidebar({
                             "block w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors",
                             subActive ? "bg-gray-100 font-medium" : "hover:bg-gray-50",
                           ].join(" ")}
-                          onClick={() => setActiveSubtab(child.id)}
+                          onClick={() => {
+                            setActiveSubtab(child.id);
+                            if (isMobile) setOpen(false);
+                          }}
                           title={child.label}
                         >
                           {child.label}
@@ -263,8 +341,8 @@ export default function Sidebar({
         </div>
       </aside>
 
-      {/* overlay‑раскладка, макет страницы не двигаем */}
-      <div className="pl-0" />
+      {/* Спейсер под шапку на мобилке, чтобы контент не прятался под topbar */}
+      <div className="md:hidden h-12" />
     </>
   );
 }

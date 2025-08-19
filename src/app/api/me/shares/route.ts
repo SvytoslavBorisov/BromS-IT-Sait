@@ -1,23 +1,38 @@
-// src/app/api/me/shares/route.ts
-
-import { NextResponse }     from "next/server";
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions }       from "@/lib/auth";
-import { prisma }           from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-export async function GET(req: Request) {
-  // 1) Проверяем сессию
+interface Share {
+  id: number;
+  x: string;
+  ciphertext: number[];
+  status: "ACTIVE" | "USED" | "EXPIRED";
+  comment: string;
+  encryptionAlgorithm: string;
+  createdAt: string;
+  expiresAt?: string | null;
+  createdAtISO: string;
+  expiresAtISO: string | null;
+  session: {
+    id: string;
+    dealerId: string;
+    p: string; q: string; g: string;
+    commitments: string[];
+    threshold: number;
+    type: "CUSTOM" | "ASYMMETRIC";
+    title?: string | null;
+  };
+}
+export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const userId = session.user.id;
 
-  // 2) Достаём из БД все доли этого пользователя,
-  //    вместе с их VSS-сессией (p, q, g, commitments, dealerId)
-  const shares = await prisma.share.findMany({
+  const rows = await prisma.share.findMany({
     where: { userId },
-    orderBy: { x: "asc" },
     select: {
       id: true,
       x: true,
@@ -29,16 +44,42 @@ export async function GET(req: Request) {
       expiresAt: true,
       session: {
         select: {
+          id: true,
+          dealerId: true,
           p: true,
           q: true,
           g: true,
           commitments: true,
-          dealerId: true,
-        }
-      }
-    }
+          threshold: true,
+          type: true,
+          title: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
   });
 
-  // 3) Отдаём клиенту JSON-массив
-  return NextResponse.json(shares);
+  const data: Share[] = rows.map(r => ({
+    id: r.id,
+    x: r.x,
+    ciphertext: r.ciphertext,
+    status: (r.status ?? "ACTIVE") as Share["status"],
+    comment: r.comment ?? "",
+    encryptionAlgorithm: r.encryptionAlgorithm ?? "RSA-OAEP-256",
+    createdAtISO: r.createdAt.toISOString(),
+    expiresAtISO: r.expiresAt ? r.expiresAt.toISOString() : null,
+    session: {
+      id: r.session.id,
+      dealerId: r.session.dealerId,
+      p: r.session.p,
+      q: r.session.q,
+      g: r.session.g,
+      commitments: r.session.commitments,
+      threshold: r.session.threshold,
+      type: r.session.type as "CUSTOM" | "ASYMMETRIC",
+      title: r.session.title,
+    },
+  }));
+
+  return NextResponse.json(data);
 }

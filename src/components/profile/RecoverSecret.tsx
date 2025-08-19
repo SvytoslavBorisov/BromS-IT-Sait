@@ -147,7 +147,6 @@ export default function RecoverSecret() {
                     <Progress value={progress} />
                   </div>
                 </div>
-
                 <div className="flex flex-col items-end gap-2">
                   {s.isActive ? (
                     <Button
@@ -155,8 +154,10 @@ export default function RecoverSecret() {
                       className="rounded-2xl"
                       aria-label="Продолжить восстановление"
                     >
-                      <RotateCw className="mr-2 h-4 w-4" />
-                      Продолжить
+                      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                        <RotateCw className="h-4 w-4" />
+                        Продолжить
+                      </span>
                     </Button>
                   ) : (
                     <Button
@@ -165,8 +166,10 @@ export default function RecoverSecret() {
                       className="rounded-2xl"
                       aria-label="Начать восстановление"
                     >
-                      <Play className="mr-2 h-4 w-4" />
-                      Начать
+                      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                        <Play className="h-4 w-4" />
+                        Начать
+                      </span>
                     </Button>
                   )}
 
@@ -176,8 +179,11 @@ export default function RecoverSecret() {
                     className="rounded-2xl"
                     aria-label="Удалить"
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
+                      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                    <Trash2 className="h-4 w-4" />
                     Удалить
+                      </span>
+
                   </Button>
 
                   <Button
@@ -186,8 +192,11 @@ export default function RecoverSecret() {
                     className="rounded-2xl"
                     aria-label="Детали исходной сессии"
                   >
-                    <ShieldCheck className="mr-2 h-4 w-4" />
+                                          <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                    <ShieldCheck className="h-4 w-4" />
                     Детали
+                      </span>
+
                   </Button>
                 </div>
               </div>

@@ -101,26 +101,7 @@ export default function CreateShares() {
       );
 
       console.log(data1);
-      // console.log(fileContent)
-      // const res = await fetch("/api/create/sertification", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({
-      //     email: 'sv@mail.ru',
-      //     cn: 'Slava2',
-      //     issuerCertPemOrDer: fileContent,
-      //     issuerPrivHex: 'f1f1205a8f0bab12aff2a5ed08296c9894686aa62ec0e131c20cafa71c59b9f1',
-      //     subjectPrivHex: '6c13eb9a952e28ec3b1ac7a668b89e37f881a865e39a3b224aa95de8e61db90e',
-      //     notBefore: new Date().toISOString(),
-      //     notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // +1 год
-      //   }),
-      // });
 
-      // if (!res.ok) {
-      //   throw new Error(`Ошибка ${res.status}: ${await res.text()}`);
-      // }
-
-      // const cerContent = await res.json(); // Извлекаем base64-строку
       console.log(data1.pem)
       downloadAsFile(data1.pem, title + '.cer', 'application/x-x509-ca-cert');
       

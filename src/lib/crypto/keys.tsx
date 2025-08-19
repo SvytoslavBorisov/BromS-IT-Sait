@@ -96,7 +96,7 @@ export function decodeCiphertext(raw: unknown): Uint8Array {
 
   /* 5. Массив чисел/строк/bigint (0-255) или Base64-символы */
   if (Array.isArray(raw)) {
-    console.log('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffsadfsadfasdsadasdadSDFSDFDSDSVDSDSV')
+    
     // 5a. все элементы — числа/строки-цифры/bigint
     if (raw.every(v => typeof v === "number" || typeof v === "string" || typeof v === "bigint")) {
       const nums = raw.map(v => Number(v));

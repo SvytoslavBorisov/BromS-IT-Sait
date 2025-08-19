@@ -54,19 +54,17 @@ export default function RecoverList() {
               </div>
             </div>
 
-            <Button
-              onClick={goCreateSession}
-              className="rounded-2xl shadow-sm"
-              aria-label="Начать новую сессию"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Начать новую сессию
-            </Button>
+          <Button onClick={goCreateSession} className="mt-2 rounded-2xl w-fit">
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <Plus className="h-4 w-4 shrink-0" />
+              <span>Начать новую сессию</span>
+            </span>
+          </Button>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-4 md:px-6 py-6">
+      <div className="mx-auto max-w-7xl px-4 md:px-6 py-6">
         {loading ? (
           <Card className="rounded-2xl shadow-sm">
             <CardHeader title="Загрузка сессий…" />
@@ -92,12 +90,11 @@ export default function RecoverList() {
                   Создайте новую сессию, чтобы поделить секрет и затем
                   восстановить его при достижении порога.
                 </p>
-                <Button
-                  onClick={goCreateSession}
-                  className="mt-2 rounded-2xl w-auto"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Начать новую сессию
+                <Button onClick={goCreateSession} className="mt-2 rounded-2xl w-fit">
+                  <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span>Начать новую сессию</span>
+                  </span>
                 </Button>
               </div>
             </CardContent>
