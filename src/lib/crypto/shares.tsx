@@ -117,6 +117,9 @@ export async function createAsymmetricShares(
     })
   );
 
+console.log(cn, new Date(notBefore), new Date(notAfter), serial)
+
+
   const res = await issueCertificateUsingGostEc({
     issuerCertDerOrPem: issuerCertPemOrDer,   // PEM строка или DER bytes/base64
     issuerPrivateKeyHex: issuerPrivHex,       // hex без 0x
@@ -132,7 +135,6 @@ export async function createAsymmetricShares(
     // curve: CryptoProA_2012_256,              // опционально, по умолчанию уже так
   });
 
-  console.log('pubKey_sert', res.subjectPubQxHex, res.subjectPubQyHex)
 
   return {
     p: p.toString(),

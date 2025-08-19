@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"; // поправь путь, если �
 import { promises as fs } from "fs";
 import path from "path";
 import { glob } from "glob";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -105,4 +106,25 @@ export async function GET(req: NextRequest) {
   filtered.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
 
   return NextResponse.json(filtered.slice(0, limit));
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const { level = "info", ...data } = body;
+
+    logger[level as "debug" | "info" | "warn" | "error"]({
+      userId: (session.user as any)?.id,
+      ...data,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  }
 }

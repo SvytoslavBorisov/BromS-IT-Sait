@@ -194,7 +194,7 @@ model AsymmetricKey {
   /// Публичный ключ Q = d·G
   Q                    String
 
-
+  certification       Certification?   @relation("asymmetricKeyCertificate")
   documentSigns documentSignSession[] @relation("publicKeyOfdocumentSign")
 }
 
@@ -355,6 +355,17 @@ model Certification {
 
   ownerId     String
   owner       User   @relation("userCertificats", fields: [ownerId], references: [id])
+
+  pem         String
+
+  asymmetricKeyId     String? @unique
+  asymmetricKey       AsymmetricKey?   @relation("asymmetricKeyCertificate", fields: [asymmetricKeyId], references: [id])
+
+    /// Когда загрузили
+  createdAt   DateTime @default(now())
+
+  /// Когда последний раз обновляли (если нужно)
+  updatedAt   DateTime @updatedAt
 }
 
 

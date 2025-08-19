@@ -63,10 +63,11 @@ export default function ProfileProcesses() {
 
       // b) расшифровка пришедшего ciphertext
       const cipherBytes = decodeCiphertext(req.ciphertext);
+      const bytes = new Uint8Array(cipherBytes);
       const plainBuf    = await crypto.subtle.decrypt(
         { name: "RSA-OAEP" },
         privKey,
-        cipherBytes
+        bytes
       );
 
       // c) публичный ключ дилера
@@ -149,9 +150,9 @@ export default function ProfileProcesses() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6 mt-10">
         <Card
-          className="border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.25)] rounded-2xl overflow-hidden"
+          className="border-white/5 bg-white/5 backdrop-blur-xl shadow-[0_8px_40px_rgba(0,0,0,0.25)] rounded-2xl overflow-hidden"
         >
           <CardHeader
             title={

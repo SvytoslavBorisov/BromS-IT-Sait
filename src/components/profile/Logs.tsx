@@ -86,13 +86,26 @@ export default function Security() {
   const groups = useMemo(() => groupByDate(logs), [logs]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">Безопасность</h1>
-          <p className="text-sm text-muted-foreground">Журнал безопасности и аудита.</p>
+    <div className="relative">
+        <div className="sticky top-0 z-20 bg-white border-b">
+          <div className="mx-auto max-w-6xl px-4 md:px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="h-9 w-9 rounded-2xl border flex items-center justify-center shadow-sm">
+                  <span className="text-sm font-semibold">SSS</span>
+                </div>
+                <div className="truncate">
+                  <h1 className="text-lg md:text-xl font-semibold leading-6 truncate">
+                    Безопасность
+                  </h1>
+                  <p className="text-muted-foreground text-xs md:text-sm">
+                    Журнал безопасности и аудита
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-
         <div className="flex gap-2 items-center">
           {/* scope tabs */}
           <div className="inline-flex rounded-xl p-1 bg-muted">
@@ -139,7 +152,6 @@ export default function Security() {
             className="rounded-lg border px-3 py-1.5 text-sm w-64"
           />
         </div>
-      </div>
 
       <Card>
         <CardHeader title="Логи безопасности" />
@@ -246,7 +258,7 @@ export default function Security() {
                             {/* раскрывающаяся панель с JSON */}
                             {isOpen && (
                               <pre className="mt-2 ml-[4.5rem] text-[11px] leading-5 overflow-x-auto bg-muted/50 rounded-lg p-3 ring-1 ring-border">
-{JSON.stringify(log, null, 2)}
+                                {JSON.stringify(log, null, 2)}
                               </pre>
                             )}
                           </li>

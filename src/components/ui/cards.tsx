@@ -14,17 +14,26 @@ export function Card({ className = "", ...props }: CardProps) {
 }
 
 export interface CardHeaderProps {
-  title: string;
+  title: React.ReactNode;           // ← было string
+  className?: string;
+  subtitle?: React.ReactNode;       // опционально
 }
 
-export function CardHeader({ title }: CardHeaderProps) {
+export function CardHeader({ title, subtitle, className }: CardHeaderProps) {
   return (
-    <div className="border-b pb-2 mb-2">
-      <h3 className="text-xl font-semibold">{title}</h3>
+    <div className={`border-b pb-2 mb-2 ${className ?? ""}`}>
+      {typeof title === "string" ? (
+        <h3 className="text-xl font-semibold">{title}</h3>
+      ) : (
+        // если пришёл сложный JSX, рендерим как есть
+        title
+      )}
+      {subtitle && (
+        <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+      )}
     </div>
   );
 }
-
 export interface CardContentProps {
   children: React.ReactNode;
 }

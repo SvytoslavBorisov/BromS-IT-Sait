@@ -12,11 +12,13 @@ export default function Sidebar({
   setActiveTab,
   activeSubtab,
   setActiveSubtab,
+  readOnly = false,
 }: {
   activeTab: Tab;
   setActiveTab: (t: Tab) => void;
   activeSubtab: SubtabId | null;
   setActiveSubtab: (s: SubtabId | null | ((p: SubtabId | null) => SubtabId | null)) => void;
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);            // состояние панели (и для мобилы, и для десктопа)
   const [expandedTab, setExpandedTab] = useState<Tab | null>(null);
@@ -68,9 +70,9 @@ export default function Sidebar({
   };
   useEffect(() => () => clearTimers(), []);
 
-  // hover только для десктопа
+  // hover только для десктопа (в readOnly не открываем автоматически, чтобы не «звали» клик)
   const onEnter = () => {
-    if (isMobile) return;
+    if (isMobile || readOnly) return;
     if (leaveTimer.current) {
       window.clearTimeout(leaveTimer.current);
       leaveTimer.current = null;
@@ -80,7 +82,7 @@ export default function Sidebar({
     }
   };
   const onLeave = () => {
-    if (isMobile) return;
+    if (isMobile || readOnly) return;
     if (enterTimer.current) {
       window.clearTimeout(enterTimer.current);
       enterTimer.current = null;
@@ -102,6 +104,8 @@ export default function Sidebar({
 
   // ГЛАВНЫЙ КЛИК
   const handleMainClick = (tab: Tab) => {
+    if (readOnly) return; // заблокировано в гостевом режиме
+
     const hasChildren = !!NAV[tab].children?.length;
 
     // Мобилка: если меню закрыто — просто открыть
@@ -131,6 +135,7 @@ export default function Sidebar({
   };
 
   const toggleExpand = (tab: Tab) => {
+    if (readOnly) return;
     setExpandedTab((prev) => (prev === tab ? null : tab));
     setActiveTab(tab);
   };
@@ -139,12 +144,17 @@ export default function Sidebar({
     "overflow-hidden whitespace-nowrap transition-[opacity] duration-300 " +
     (open ? "opacity-100" : "opacity-0");
 
+  // disabled helper классы
+  const disabledRow = readOnly ? "opacity-50 cursor-not-allowed" : "";
+  const disabledBtn = readOnly ? "pointer-events-none opacity-60" : "";
+
   // Кнопка-гамбургер (верхняя шапка) — только для мобилы
   const MobileTopbar = () => (
     <div className="md:hidden fixed top-0 left-0 right-0 z-30 h-12 bg-white/95 backdrop-blur border-b flex items-center justify-between px-3">
       <button
+        disabled={readOnly}
         aria-label="Открыть меню"
-        className="h-9 w-9 rounded-md border flex items-center justify-center active:scale-95"
+        className={`h-9 w-9 rounded-md border flex items-center justify-center active:scale-95 ${disabledBtn}`}
         onClick={() => setOpen(true)}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
@@ -170,27 +180,23 @@ export default function Sidebar({
         />
       )}
 
-      {/* Боковая панель:
-          - Мобилка: off‑canvas (translateX), ширина w-72
-          - Десктоп: твоя логика ширины w-16 / w-64 и hover */}
+      {/* Боковая панель */}
       <aside
         className={[
           "fixed left-0 top-0 z-50 h-screen bg-white border-r shadow-xl flex flex-col",
-          // мобильный off-canvas
           "md:translate-x-0 md:transition-[width] md:duration-300 md:ease-out md:will-change-[width]",
           isMobile
             ? `w-72 transition-transform duration-300 ${open ? "translate-x-0" : "-translate-x-full"}`
             : open
             ? "w-64"
             : "w-16",
-          // hover только на десктопе
           !isMobile ? "pointer-events-auto" : "",
         ].join(" ")}
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
         aria-label="Sidebar"
       >
-        {/* Шапка внутри панели (для десктопа видимая, для мобилы — тоже ок) */}
+        {/* Шапка внутри панели */}
         <div className="px-3 py-4 flex items-center justify-between">
           <div className="flex items-center">
             <div className="h-8 w-8 rounded-md bg-gray-100" />
@@ -238,11 +244,14 @@ export default function Sidebar({
                     "inline-grid items-center",
                     open ? "grid-cols-[40px_1fr_16px]" : "grid-cols-[40px_0fr_16px]",
                     "gap-x-2",
+                    disabledRow,
                   ].join(" ")}
+                  aria-disabled={readOnly}
                 >
                   {/* иконка / главный клик */}
                   <button
-                    className="col-start-1 h-10 w-10 flex items-center justify-center rounded-md"
+                    disabled={readOnly}
+                    className={`col-start-1 h-10 w-10 flex items-center justify-center rounded-md ${disabledBtn}`}
                     onClick={() => handleMainClick(tab)}
                     title={NAV[tab].label}
                   >
@@ -253,7 +262,8 @@ export default function Sidebar({
 
                   {/* подпись */}
                   <button
-                    className={["col-start-2 text-left text-sm pr-1", labelCls].join(" ")}
+                    disabled={readOnly}
+                    className={["col-start-2 text-left text-sm pr-1", labelCls, disabledBtn].join(" ")}
                     onClick={() => handleMainClick(tab)}
                     title={NAV[tab].label}
                   >
@@ -263,11 +273,13 @@ export default function Sidebar({
                   {/* чеврон */}
                   {hasChildren ? (
                     <button
+                      disabled={readOnly}
                       className={[
                         "col-start-3 h-10 w-4 flex items-center justify-center",
                         "transition-transform",
                         isExpanded ? "rotate-90" : "rotate-0",
                         open ? "opacity-100" : "opacity-0 pointer-events-none",
+                        disabledBtn,
                       ].join(" ")}
                       aria-label={isExpanded ? "Свернуть" : "Развернуть"}
                       onClick={(e) => {
@@ -302,11 +314,14 @@ export default function Sidebar({
                       return (
                         <button
                           key={child.id}
+                          disabled={readOnly}
                           className={[
                             "block w-full text-left text-sm py-1.5 px-2 rounded-md transition-colors",
                             subActive ? "bg-gray-100 font-medium" : "hover:bg-gray-50",
+                            disabledBtn,
                           ].join(" ")}
                           onClick={() => {
+                            if (readOnly) return;
                             setActiveSubtab(child.id);
                             if (isMobile) setOpen(false);
                           }}
