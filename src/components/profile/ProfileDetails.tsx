@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { InfoRow, ProfileHeader, type Me } from "./ProfileInfo";
 import ProfileLogs from "./ProfileLogs";
+import { Button } from "@/components/ui/button";
+import TelegramLoginButtonClient from "@/components/integrations/TelegramLoginButton.client";
 
 export default function ProfileDetails() {
   const { data: session, status } = useSession();
@@ -58,7 +60,6 @@ export default function ProfileDetails() {
     setAvatarErr(null);
     const fd = new FormData();
     fd.append("file", file);
-    // если надо: fd.append("userId", user.id)
 
     const res = await fetch("/api/me/avatar", {
       method: "POST",
@@ -66,21 +67,16 @@ export default function ProfileDetails() {
       credentials: "include",
     });
 
-    if (!res.ok) {
-      throw new Error(`Ошибка загрузки (${res.status})`);
-    }
+    if (!res.ok) throw new Error(`Ошибка загрузки (${res.status})`);
 
-    // ожидаем { image: "url" } или { url: "..." }
     const data = await res.json();
     const newUrl: string | undefined = data.image ?? data.url ?? data.avatar;
+    if (!newUrl) throw new Error("Сервер не вернул ссылку на изображение");
 
-    if (!newUrl) {
-      throw new Error("Сервер не вернул ссылку на изображение");
-    }
-
-    // оптимистично обновим локальное состояние
     setMe((prev) => ({ ...(prev ?? {}), image: newUrl }));
   };
+
+  const botUsername = process.env.NEXT_PUBLIC_TG_BOT_USERNAME!;
 
   return (
     <section className="w-full">
@@ -88,8 +84,7 @@ export default function ProfileDetails() {
         {/* ЛЕВАЯ: ПРОФИЛЬ */}
         <div className="col-span-12 lg:col-span-8">
           <div className="rounded-2xl bg-white shadow-sm overflow-hidden">
-
-            {/* Шапка (баннер + аватар с кликом) */}
+            {/* Шапка */}
             <ProfileHeader
               fullName={fullName}
               name={name}
@@ -122,7 +117,7 @@ export default function ProfileDetails() {
 
               <div className="mt-6 grid grid-cols-1 gap-2">
                 <InfoRow
-                  label="E‑mail"
+                  label="E-mail"
                   value={user.email}
                   href={user.email ? `mailto:${user.email}` : undefined}
                 />
@@ -135,6 +130,28 @@ export default function ProfileDetails() {
                   href={user.phone ? `tel:${user.phone}` : undefined}
                 />
                 <InfoRow label="Локация" value={user.location} />
+              </div>
+
+              {/* === КРАСИВАЯ КНОПКА Telegram === */}
+              <div className="mt-8 flex">
+                {user.telegramId ? (
+                  <Button
+                    variant="secondary"
+                    className="rounded-xl bg-green-50 text-green-700 hover:bg-green-100"
+                  >
+                    ✅ Аккаунт Telegram привязан
+                  </Button>
+                ) : (
+                  <div className="w-full">
+                    <TelegramLoginButtonClient
+                      botUsername={botUsername} // замените на реальное имя бота
+                      size="large"
+                      cornerRadius={12}
+                      requestAccessWrite={true}
+                      refreshAfterLink={true}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

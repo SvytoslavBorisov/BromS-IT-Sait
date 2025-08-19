@@ -12,6 +12,7 @@ export default async function ParticipantsPage() {
       name: true,
       publicKey: true,
       managerId: true,
+      email: true
     },
   });
 

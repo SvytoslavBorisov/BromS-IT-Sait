@@ -9,6 +9,7 @@ export type FileType = "CUSTOM" | "ASYMMETRIC";
 
 export interface Participant {
   id: string;
+  email: string;
   name: string;
   publicKey: JsonWebKey;
 }

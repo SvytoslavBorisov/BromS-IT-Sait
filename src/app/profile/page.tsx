@@ -9,12 +9,12 @@ import Sidebar from "@/components/profile/Sidebar";
 import { type Tab, type SubtabId } from "@/components/profile/nav";
 
 import ProfileDetails     from "@/components/profile/ProfileDetails";
-import Settings           from "@/components/profile/Settings";
+import SettingsPage          from "@/components/profile/Settings";
 import Security           from "@/components/profile/Security";
 import MyShares           from "@/components/profile/Shares";
 import ProfileProcesses   from "@/components/profile/Process";
 import RecoverList        from "@/components/profile/RecoverList";
-import CreateShares       from "@/components/CreateShares";
+import CreateShares       from "@/components/profile/CreateShares";
 import DocumentsPage      from "@/components/profile/Documents";
 import CertificatesList   from "@/components/profile/Certificates";
 
@@ -133,7 +133,7 @@ export default function ProfilePage() {
         switch (activeSubtab) {
           case "settings.profile":
           default:
-            return <Settings />;
+            return <SettingsPage />;
           case "settings.notifications":
             return <div>Настройки уведомлений</div>;
           case "settings.access":

@@ -64,6 +64,8 @@ model User {
   emailVerified  DateTime?
   publicKey      Json?
   image          String?
+  phone          String?
+  location       String?
 
   shares         Share[]           @relation("UserShares")
 
@@ -92,6 +94,17 @@ model User {
   managerId      String?            // ссылка на руководителя
   manager        User?              @relation("UserHierarchy", fields: [managerId], references: [id])
   reports        User[]             @relation("UserHierarchy")
+
+  /// --- Telegram link ---
+  telegramId           String?   @unique            // user_id / chat_id из Telegram (храним как строку для совместимости)
+  telegramUsername     String?                      // @username (не уникален, может меняться)
+  telegramLinkedAt     DateTime?                    // когда привязали аккаунт
+  telegramAllowsWrite  Boolean    @default(false)   // согласие "Allow to message" (Login Widget/WebApp)
+  telegramPhotoUrl     String?                      // аватар (если нужен в UI)
+  telegramLanguageCode String?                      // например "ru" / "en"
+  telegramLastAuthAt   DateTime?                    // время последней успешной валидации hash/initData
+
+  @@index([telegramUsername])
 }
 
 model UserSettings {
