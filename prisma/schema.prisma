@@ -107,7 +107,6 @@ model User {
   telegramLastAuthAt   DateTime?                    // время последней успешной валидации hash/initData
 
   @@index([telegramUsername])
-  @@map("users")
 }
 
 model UserSettings {
