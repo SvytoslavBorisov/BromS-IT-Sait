@@ -16,6 +16,8 @@ import ProfileProcesses   from "@/components/profile/Process";
 import RecoverList        from "@/components/profile/RecoverList";
 import CreateShares       from "@/components/profile/CreateShares";
 import DocumentsPage      from "@/components/profile/Documents";
+import ChatContainer      from "@/components/profile/Chat/ChatContainer";
+import SignsPage      from "@/components/profile/Signs";
 import CertificatesList   from "@/components/profile/Certificates";
 
 import PublicProfileBasic from "@/components/profile/PublicProfileBasic"; // ← новый компонент
@@ -113,6 +115,8 @@ export default function ProfilePage() {
             return <CertificatesList />;
           case "storage.docs":
             return <DocumentsPage />;
+          case "storage.signs":
+            return <SignsPage />;
           default:
             return <RecoverList />;
         }
@@ -125,6 +129,9 @@ export default function ProfilePage() {
           case "process.history":
             return <div>История процессов</div>;
         }
+
+      case "chat":
+        return <ChatContainer />;
 
       case "security":
         return <Security />;

@@ -10,7 +10,8 @@
     "pretest": "npm run build",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watch",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "realtime": "ts-node realtime/server.ts"
   },
   "browserslist": [
     "defaults",
@@ -36,6 +37,7 @@
     "cloudflared": "^0.7.1",
     "cookie": "^1.0.2",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.1",
     "elliptic": "^6.6.1",
     "expose": "^0.1.4",
     "forge": "^2.3.0",
@@ -44,6 +46,7 @@
     "gostcrypto": "github:musaevonline/nodejs-gost-crypto#nodefy",
     "html-react-parser": "^5.2.5",
     "iconv-lite": "^0.6.3",
+    "io": "^1.5.7",
     "ioredis": "^5.7.0",
     "jwk-to-pem": "^2.0.7",
     "lucide-react": "^0.532.0",
@@ -94,7 +97,7 @@
     "tailwindcss": "^4",
     "ts-jest": "^29.4.1",
     "ts-node": "^10.9.2",
-    "tsx": "^4.20.3",
+    "tsx": "^4.20.4",
     "typescript": "^5.9.2"
   }
 }

@@ -108,7 +108,7 @@ export default function ProfileProcesses() {
       setRequests((rs) => rs.filter((r) => r.id !== req.id));
     }
     catch (e: any) {
-      console.log("Тута");
+      console.log("Тута", e);
       setError(e.message);
     }
   };

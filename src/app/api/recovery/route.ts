@@ -85,14 +85,6 @@ export async function POST(req: NextRequest) {
     })),
   });
 
-  log({
-    event:      "recovery_started",
-    recoveryId: recovery.id,
-    shareSessionId,
-    participants: shareholderIds,
-    timestamp:  new Date().toISOString(),
-  });
-
   return NextResponse.json({ recoveryId: recovery.id });
 }
 
@@ -197,8 +189,6 @@ if (role === "dealer") {
         },
         orderBy: { createdAt: "desc" },  // если их несколько, берём последнюю
       });
-
-      console.log('s', s);
 
       return {
         id:             s.id,

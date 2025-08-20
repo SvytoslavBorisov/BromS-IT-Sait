@@ -7,6 +7,7 @@ export type Tab =
   | "storage"
   | "keys"
   | "process"
+  |  "chat"
   | "security"
   | "settings";
 
@@ -36,6 +37,7 @@ export const NAV: Record<
       { id: "storage.keys", label: "Ключи" },
       { id: "storage.shares", label: "Доли" },
       { id: "storage.certs", label: "Сертификаты" },
+      { id: "storage.signs", label: "Подписи" },
       { id: "storage.docs", label: "Документы" },
     ],
     },
@@ -56,6 +58,9 @@ export const NAV: Record<
       { id: "process.history", label: "История" },
     ],
   },
+  chat: { 
+    label: "Чат", 
+    icon: "📄"},
   security: { 
     label: "Журнал безопасности", 
     icon: "📄"},

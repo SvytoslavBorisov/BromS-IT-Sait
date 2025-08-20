@@ -30,7 +30,7 @@ export default function RecoverList() {
   }, []);
 
   const goCreateSession = () =>
-    router.push("http://localhost:3000/profile?tab=keys&sub=keys.create");
+    router.push("/profile?tab=keys&sub=keys.create");
 
   const handleRecover = (id: string) =>
     router.push(`/profile?tab=recover&session=${id}`);

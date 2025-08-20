@@ -1,54 +1,14 @@
-"use client";
+// server component (без "use client")
+import LoginForm from "@/components/auth/LoginForm";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
-
+export const metadata = {
+  title: "Вход",
+};
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const res = await signIn("credentials", {
-      redirect: false,
-      email,
-      password,
-      callbackUrl: "/profile",   // сюда придём после логина
-    });
-    
-    if (!res?.error) router.push(res?.url!);
-  };
-  
   return (
-    <div className="max-w-md mx-auto p-4">
-      <h1 className="text-2xl mb-4">Вход</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && <p className="text-red-500">{error}</p>}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          className="w-full p-2 border rounded"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Пароль"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          className="w-full p-2 border rounded"
-          required
-        />
-        <button type="submit" className="w-full py-2 bg-green-600 text-white rounded">
-          Войти
-        </button>
-      </form>
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black">
+      <LoginForm />
     </div>
   );
 }

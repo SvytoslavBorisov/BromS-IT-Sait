@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { getServerSession } from "next-auth/next";
 import { prisma } from "@/lib/prisma";
-
+import { authOptions } from "@/lib/auth";
 export const config = {
   api: {
     bodyParser: false,
@@ -14,7 +14,7 @@ const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Неавторизован" }, { status: 401 });
   }
@@ -52,18 +52,30 @@ export async function POST(req: NextRequest) {
 
 
 export async function GET() {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Неавторизован" }, { status: 401 });
   }
 
   const docs = await prisma.document.findMany({
-    where: { user: { email: session.user.email } },
-    orderBy: { createdAt: "desc" },
+    where: { user: { email: session.user.email } }, // фильтр по владельцу
     include: {
-      documentSignSession: true,   
-    },
-  });
+      documentSignSession: {
+        take: 1,
+        include: {
+          recovery: {
+            include: {
+              receipts: true,
+              shareSession: { select: { threshold: true } },
+            },
+          },
+          publicKey: {
+            include: { privateKeySharing: { select: { threshold: true } } },
+          },
+        },
+      },
+    }
+  })
 
   return NextResponse.json(docs);
 }

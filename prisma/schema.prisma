@@ -95,6 +95,8 @@ model User {
   manager        User?              @relation("UserHierarchy", fields: [managerId], references: [id])
   reports        User[]             @relation("UserHierarchy")
 
+  messages      ChatMessage[]   @relation("userMessage")
+
   /// --- Telegram link ---
   telegramId           String?   @unique            // user_id / chat_id из Telegram (храним как строку для совместимости)
   telegramUsername     String?                      // @username (не уникален, может меняться)
@@ -105,6 +107,7 @@ model User {
   telegramLastAuthAt   DateTime?                    // время последней успешной валидации hash/initData
 
   @@index([telegramUsername])
+  @@map("users")
 }
 
 model UserSettings {
@@ -148,6 +151,7 @@ model ShamirSession {
   publicKey   AsymmetricKey? @relation("asymmetricShareSession")
   shares      Share[]   @relation("SessionShares")
   recoveries  RecoverySession[]
+  signatures          Signatures[]         @relation("shamirSessionSignatures")
 }
 
 model Share {
@@ -321,12 +325,18 @@ model documentSignSession {
 
 model Signatures {
   id          String    @id @default(cuid())
+  filePath    String?     // если присоединенная то храним как файла
+  pem         String?
+  type        String
 
   documentId        String
   document          Document         @relation("documentIdSignatures", fields:[documentId], references:[id])
 
   userId      String
   user        User      @relation("usersSignatures", fields: [userId], references: [id])
+
+  shamirSessionId        String?
+  shamirSession          ShamirSession?         @relation("shamirSessionSignatures", fields:[shamirSessionId], references:[id])
 }
 
 model Company {
@@ -381,6 +391,15 @@ model Certification {
   updatedAt   DateTime @updatedAt
 }
 
+model ChatMessage {
+  id        String   @id @default(cuid())
+  room      String
+  text      String
+  userId    String
+  user      User   @relation("userMessage", fields: [userId], references: [id])
+  ts        DateTime @default(now())
+  // @@index([room, ts])
+}
 
 //
 //   ENUMS
