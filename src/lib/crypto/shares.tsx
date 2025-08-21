@@ -131,11 +131,11 @@ console.log(cn, new Date(notBefore), new Date(notAfter), serial)
     subjectCN: cn,
     notBefore: new Date(notBefore),
     notAfter:  new Date(notAfter),
-    serialNumber: serial,                     // опционально
+    serialNumber: serial,
+    crlDpUrl: "https://broms-it.ru/crl/ca.crl",                     // опционально
     streebog256,
     // curve: CryptoProA_2012_256,              // опционально, по умолчанию уже так
   });
-
 
   return {
     p: p.toString(),

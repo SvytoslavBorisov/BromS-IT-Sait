@@ -22,6 +22,8 @@
     "safari >= 13"
   ],
   "dependencies": {
+    "@aktivco-it/rutoken-plugin-bootstrap": "^1.9.8",
+    "@aktivco/rutoken-plugin": "^1.0.9",
     "@li0ard/streebog": "^0.2.4",
     "@next-auth/prisma-adapter": "^1.0.7",
     "@next/font": "^14.2.15",
@@ -58,6 +60,7 @@
     "node-gost-crypto": "^1.0.2",
     "nodemailer": "^6.10.1",
     "openssl": "^2.0.0",
+    "peculiar": "^0.14.1",
     "pino": "^9.7.0",
     "pkijs": "^3.2.5",
     "prisma": "^6.12.0",

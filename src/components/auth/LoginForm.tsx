@@ -3,6 +3,8 @@
 import React from "react";
 import { useLogin } from "@/hooks/useLogin";
 import { Eye, EyeOff, LogIn, Loader2, Mail, Lock } from "lucide-react";
+import  { RutokenButton } from "./RutokenButton";
+
 
 export default function LoginForm() {
   const {
@@ -135,6 +137,8 @@ export default function LoginForm() {
             </form>
           </div>
         </div>
+
+        <RutokenButton setError={setError} />
 
         <p className="mt-6 text-center text-xs text-gray-500">
           Защищено NextAuth — авторизация по email/паролю

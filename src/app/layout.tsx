@@ -69,6 +69,8 @@ export default function MainLayout({ children }: { children: ReactNode }) {
             </main>
           </div>
         </Providers>
+
+        <Script src="/rutoken-plugin.js" strategy="beforeInteractive" />
       </body>
     </html>
   );

@@ -37,3 +37,11 @@
 {"timestamp":"2025-08-21T06:22:41.466Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"participants.fetch.success","count":5}
 {"timestamp":"2025-08-21T06:22:41.768Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"participants.fetch.success","count":5}
 {"timestamp":"2025-08-21T06:23:01.271Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"shares.create.start","type":"ASYMMETRIC","threshold":1,"selectedCount":1,"title":"2108_2"}
+{"timestamp":"2025-08-21T07:33:27.101Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"shares.create.start","type":"ASYMMETRIC","threshold":1,"selectedCount":1,"title":"2108_2"}
+{"timestamp":"2025-08-21T07:40:45.607Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"shares.create.start","type":"ASYMMETRIC","threshold":1,"selectedCount":1,"title":"2108_2"}
+{"timestamp":"2025-08-21T07:41:44.242Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"shares.create.start","type":"ASYMMETRIC","threshold":1,"selectedCount":1,"title":"2108_2"}
+{"timestamp":"2025-08-21T07:49:52.398Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"shares.create.start","type":"ASYMMETRIC","threshold":1,"selectedCount":1,"title":"2108_3"}
+{"timestamp":"2025-08-21T07:51:28.462Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"shares.create.start","type":"ASYMMETRIC","threshold":1,"selectedCount":1,"title":"2108_3"}
+{"timestamp":"2025-08-21T08:02:15.108Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"shares.create.start","type":"ASYMMETRIC","threshold":1,"selectedCount":1,"title":"2108_3"}
+{"timestamp":"2025-08-21T08:14:52.675Z","level":"info","userId":"cmekzuavr0001t9is9sy2cj7k","event":"shares.create.start","type":"ASYMMETRIC","threshold":1,"selectedCount":1,"title":"2108_4"}
+{"timestamp":"2025-08-21T12:28:43.303Z","level":"info","requestId":"ee72023b-5ca6-4542-86ea-334e3b9f7120","module":"auth/credentials","event":"auth.login","method":"password","outcome":"success","userId":"cmekzuavr0001t9is9sy2cj7k","login":"sv1@mail.ru","ip":"::1","ua":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 YaBrowser/25.6.0.0 Safari/537.36","latencyMs":565}
