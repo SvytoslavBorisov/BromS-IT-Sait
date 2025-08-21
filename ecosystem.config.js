@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: "realtime",
-      script: "tsx",
+      script: "npx",
       args: "realtime/server.ts",
       cwd: "/var/www/bromsit/BromS-IT-Sait",
       env: {
