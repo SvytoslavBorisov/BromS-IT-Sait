@@ -1,6 +1,5 @@
 // lib/gost-x509.ts
-// ГОСТ Р 34.10-2012 (256) + Стрибог-256 — генерация X.509
-// Совместимо с твоей python-версией (OCTET STRING внутри subjectPublicKey).
+// ГОСТ Р 34.10-2012 (256) + Стрибог-256 — генерация X.509 (деревянный DER, без внешних зависимостей)
 
 import {
   CryptoProA_2012_256,
@@ -10,8 +9,7 @@ import {
 } from "@/lib/crypto/espoint";
 import { streebog256 as streebog256Sync } from "@/lib/crypto/streebog";
 
-const streebog256 = async (data: Uint8Array) => Promise.resolve(streebog256Sync(data));
-
+/* ====== ХЭШ/СИГНАТУРА ТИПЫ ====== */
 export type Bigish = bigint | number | string;
 export type Gost256CurveParams = { p: bigint; a: bigint; b: bigint; q: bigint; gx: bigint; gy: bigint; };
 export type Signer256 = (e: bigint, dPriv: bigint, params: Gost256CurveParams) =>
@@ -19,16 +17,26 @@ export type Signer256 = (e: bigint, dPriv: bigint, params: Gost256CurveParams) =
 export type Hash256 = (data: Uint8Array) => Promise<Uint8Array>|Uint8Array;
 
 export type IssueOptions = {
-  issuerCertDerOrPem: Uint8Array | string;
-  issuerPrivateKeyHex: string;
-  subjectPrivateKeyHex?: string;
-  subjectPublicQxHex?: string;
+  issuerCertDerOrPem: Uint8Array | string; // сертификат ИЗДАТЕЛЯ (может быть самоподписанный)
+  issuerPrivateKeyHex: string;             // приватный ключ ИЗДАТЕЛЯ (hex)
+  subjectPrivateKeyHex?: string;           // приватный ключ субъекта (если нет Qx/Qy)
+  subjectPublicQxHex?: string;             // публичные координаты субъекта (если нет приватного)
   subjectPublicQyHex?: string;
+
   subjectEmail: string;
   subjectCN: string;
   notBefore: Date;
   notAfter: Date;
   serialNumber?: Bigish;
+
+  /* Профиль сертификата */
+  isCA?: boolean;                 // если true: KU=keyCertSign|cRLSign, BC.cA=TRUE; иначе EE-профиль
+  publicKeyParamSetOid?: string;  // OID TC26 paramSet (по умолчанию A)
+  crlDpUrls?: string[];           // куда положен CRL издателя (для проверки отзыва)
+  ocspUrl?: string;               // OCSP URL (не критичный AIA)
+  includeAIAForEE?: boolean;      // по умолчанию true для EE
+
+  /* Низкоуровневые */
   curve: Gost256CurveParams;
   streebog256: Hash256;
   gost3410_2012_256_sign: Signer256;
@@ -42,19 +50,30 @@ export type IssueResult = {
 
 /* =============== OIDs =============== */
 const OID = {
-  SIGNWITHDIGEST_256: "1.2.643.7.1.1.3.2", // GOST 34.10-2012 + 34.11-2012 (256)
-  PUBKEY_2012_256:    "1.2.643.7.1.1.1.1",
-  CPRO_XCHA:          "1.2.643.2.2.36.0",
-  DIGEST_256:         "1.2.643.7.1.1.2.2",
+  // алгоритмы
+  SIGNWITHDIGEST_256: "1.2.643.7.1.1.3.2", // id-tc26-signwithdigest-gost3410-12-256
+  PUBKEY_2012_256:    "1.2.643.7.1.1.1.1", // id-tc26-gost3410-12-256
+  DIGEST_256:         "1.2.643.7.1.1.2.2", // id-tc26-gost3411-12-256
+
+  // TC26 256-bit param sets
+  TC26_256_A:         "1.2.643.7.1.2.1.1.1",
+  TC26_256_B:         "1.2.643.7.1.2.1.1.2",
+  TC26_256_C:         "1.2.643.7.1.2.1.1.3",
+  TC26_256_D:         "1.2.643.7.1.2.1.1.4",
+
+  // имена/расширения
   EMAIL:              "1.2.840.113549.1.9.1",
   CN:                 "2.5.4.3",
   SKI:                "2.5.29.14",
   KU:                 "2.5.29.15",
   BC:                 "2.5.29.19",
   AKI:                "2.5.29.35",
+  CRLDP:              "2.5.29.31",
+  AIA:                "1.3.6.1.5.5.7.1.1",
+  PKIX_OCSP:          "1.3.6.1.5.5.7.48.1",
 };
 
-/* =============== bytes/bigint/DER утилиты =============== */
+/* =============== bytes/bigint/DER =============== */
 function hexToBytesBE(hex: string, size?: number): Uint8Array {
   let h = hex.trim().replace(/^0x/i, "").replace(/[\s:_-]/g, "");
   if (!/^[0-9a-fA-F]*$/.test(h)) throw new Error(`Invalid hex string: ${hex}`);
@@ -138,6 +157,8 @@ function parseTLV(buf:Uint8Array, off:number):TLV{
   const head=i-off; const valOff=i; const end=valOff+len; if(end>buf.length) throw new Error("len OOR");
   return {tag,len,head,valOff,end};
 }
+
+/* ====== Вспомогательное ====== */
 function* iterChildren(seqVal:Uint8Array){
   let off=0; while(off<seqVal.length){ const t=parseTLV(seqVal,off); yield {slice:seqVal.slice(off,t.end), tlv:t}; off=t.end; }
 }
@@ -152,8 +173,8 @@ function derToPem(der:Uint8Array,label:string):string{
   const lines=b64.replace(/(.{64})/g,"$1\n"); return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----\n`;
 }
 
-/** Жёстко и корректно вытаскиваем issuer.Name и issuer.serialNumber из DER издателя */
-function extractIssuerNameAndSerial(der: Uint8Array){
+/** Жёстко вытаскиваем issuer.Name, issuer.serialNumber, а также его subjectPublicKey (payload из BIT STRING) */
+function extractIssuerBasics(der: Uint8Array){
   const cert = parseTLV(der, 0);
   if (cert.tag !== 0x30) throw new Error("issuer cert: not SEQUENCE");
   const certVal = der.slice(cert.valOff, cert.end);
@@ -185,10 +206,35 @@ function extractIssuerNameAndSerial(der: Uint8Array){
   const issuerName = parseTLV(tbsVal, off);
   if (issuerName.tag !== 0x30) throw new Error("issuer cert: issuer Name not found");
   const issuerNameTLV = tbsVal.slice(off, off + issuerName.head + issuerName.len);
+  off += issuerName.head + issuerName.len;
 
-  return { issuerNameTLV, issuerSerialInt };
+  // validity, subject (skip)
+  const validity = parseTLV(tbsVal, off); off += validity.head + validity.len;
+  const subject  = parseTLV(tbsVal, off); off += subject.head + subject.len;
+
+  // subjectPublicKeyInfo
+  const spki = parseTLV(tbsVal, off);
+  if (spki.tag !== 0x30) throw new Error("issuer cert: spki not found");
+  const spkiVal = tbsVal.slice(spki.valOff, spki.end);
+
+  // spki ::= SEQUENCE { algo, BIT STRING }
+  const spkiAlgo = parseTLV(spkiVal, 0);
+  const spkiBitS = parseTLV(spkiVal, spkiAlgo.head + spkiAlgo.len);
+  if (spkiBitS.tag !== 0x03) throw new Error("issuer cert: spki.bitstring not found");
+  const bitPayload = spkiVal.slice(spkiBitS.valOff, spkiBitS.end); // [unused, ...payload]
+  if (!bitPayload.length) throw new Error("issuer cert: empty subjectPublicKey bitstring");
+  const spkiPayload = bitPayload.slice(1); // skip 'unused' byte
+
+  return { issuerNameTLV, issuerSerialInt, issuerSpkiSubjectPublicKey: spkiPayload };
 }
 
+/* разные мелочи */
+function intContentForDER(x: bigint){ // содержимое INTEGER с ведущим 0x00 при установленном старшем бите
+  let b = bigIntToBE(x);
+  if (b.length === 0) b = new Uint8Array([0]);
+  if (b[0] & 0x80) b = Uint8Array.of(0x00, ...b);
+  return b;
+}
 function intToUnsigned(x:bigint){ let b=bigIntToBE(x); if(b.length>0 && b[0]===0) b=b.slice(1); return b; }
 function randomSerial():bigint{ const r=defaultRng(8); return bytesToBigInt(r); }
 function defaultRng(n:number){
@@ -199,25 +245,45 @@ function defaultRng(n:number){
   return require("crypto").randomBytes(n);
 }
 
-const OID_CDP = "2.5.29.31";
-function extCRLDistributionPoints(uri: string) {
-  const gnURI = tlv(0x86, asciiBytes(uri));          // uniformResourceIdentifier
-  const fullName = tlv(0xA0, SEQ(gnURI));            // [0] GeneralNames
-  const dp = SEQ(fullName);                          // DistributionPoint
-  const dpSeq = SEQ(dp);                             // SEQUENCE OF
-  return SEQ(OID_DER(OID_CDP), OCTET_STRING(dpSeq)); // extnValue = OCTET STRING(...)
+/* ====== BIT STRING helper для KeyUsage ====== */
+function bitStringFromBits(indices: number[]): {bytes: Uint8Array, unused: number} {
+  if (!indices.length) return { bytes: new Uint8Array([0]), unused: 7 };
+  const maxBit = Math.max(...indices);
+  const numBits = maxBit + 1;
+  const numBytes = Math.ceil(numBits / 8);
+  const out = new Uint8Array(numBytes);
+  for (const i of indices) {
+    const byteIndex = Math.floor(i / 8);
+    const bitInByte = i % 8;
+    out[byteIndex] |= (1 << (7 - bitInByte));
+  }
+  const unused = numBytes * 8 - numBits;
+  return { bytes: out, unused };
 }
 
-// --- AIA (1.3.6.1.5.5.7.1.1): AccessDescription = SEQ{ OID(ocsp), GeneralName(URI) }
-const OID_AIA = "1.3.6.1.5.5.7.1.1";
-const OID_PKIX_OCSP = "1.3.6.1.5.5.7.48.1";
+/* ====== Расширения CRLDP / AIA ====== */
+function extCRLDistributionPoints(urls: string[]) {
+  // DistributionPointName ::= CHOICE { fullName [0] GeneralNames }
+  // GeneralName ::= uniformResourceIdentifier [6] IA5String(uri)
+  const dps: Uint8Array[] = [];
+  for (const uri of urls) {
+    const gnURI = tlv(0x86, IA5String(uri).slice(2));   // 0x86 + raw IA5 (без тега/длины IA5)
+    const fullName = tlv(0xA0, SEQ(gnURI));             // [0] GeneralNames
+    const dp = SEQ(fullName);                           // DistributionPoint
+    dps.push(dp);
+  }
+  const seqOf = SEQ(...dps);
+  return SEQ(OID_DER(OID.CRLDP), OCTET_STRING(seqOf));  // extnValue = OCTET STRING(...)
+}
+
 function extAuthorityInfoAccessOcsp(uri: string) {
-  const ad = SEQ(OID_DER(OID_PKIX_OCSP), tlv(0x86, asciiBytes(uri))); // accessMethod + accessLocation
-  const aiaSeq = SEQ(ad);                                             // SEQUENCE OF
-  return SEQ(OID_DER(OID_AIA), OCTET_STRING(aiaSeq));
+  // AccessDescription ::= SEQUENCE { accessMethod OID(ocsp), accessLocation GeneralName(URI) }
+  const ad = SEQ(OID_DER(OID.PKIX_OCSP), tlv(0x86, IA5String(uri).slice(2)));
+  const aiaSeq = SEQ(ad);
+  return SEQ(OID_DER(OID.AIA), OCTET_STRING(aiaSeq));
 }
 
-/* маленький SHA-1 для SKI (как в python-версии) */
+/* маленький SHA-1 (для SKI/AKI.keyIdentifier) */
 function sha1(msg: Uint8Array): Uint8Array {
   const w=new Uint32Array(80); const ml=msg.length*8;
   const withOne=new Uint8Array(((msg.length+9+63)>>6)<<6); withOne.set(msg,0); withOne[msg.length]=0x80;
@@ -242,7 +308,7 @@ function sha1(msg: Uint8Array): Uint8Array {
   return out;
 }
 
-/* ===================== API ===================== */
+/* ===================== Утилита выпуска под ГОСТ-EC ===================== */
 export async function issueCertificateUsingGostEc(args: Omit<IssueOptions,
   "curve" | "gost3410_2012_256_sign" | "subjectPublicQxHex" | "subjectPublicQyHex"> & {
     streebog256: Hash256; curve?: EcCurve; subjectPublicQxHex?: string; subjectPublicQyHex?: string;
@@ -262,19 +328,23 @@ export async function issueCertificateUsingGostEc(args: Omit<IssueOptions,
   });
 }
 
+/* ===================== Основная функция выпуска ===================== */
 export async function issueGost256Certificate(opts: IssueOptions): Promise<IssueResult>{
-  const { issuerCertDerOrPem, issuerPrivateKeyHex,
+  const {
+    issuerCertDerOrPem, issuerPrivateKeyHex,
     subjectPrivateKeyHex, subjectPublicQxHex, subjectPublicQyHex,
     subjectEmail, subjectCN, notBefore, notAfter, serialNumber,
-    curve, streebog256, gost3410_2012_256_sign, rng } = opts;
+    isCA = false, publicKeyParamSetOid,
+    crlDpUrls = [], ocspUrl, includeAIAForEE = true,
+    curve, streebog256, gost3410_2012_256_sign, rng
+  } = opts;
 
   const issuerDER = typeof issuerCertDerOrPem==="string" ? pemToDer(issuerCertDerOrPem) : issuerCertDerOrPem;
-  const { issuerNameTLV, issuerSerialInt } = extractIssuerNameAndSerial(issuerDER);
+  const { issuerNameTLV, issuerSerialInt, issuerSpkiSubjectPublicKey } = extractIssuerBasics(issuerDER);
 
   const q = curve.q;
   let dSub: bigint;
-  if (subjectPrivateKeyHex)
-    dSub = BigInt("0x"+subjectPrivateKeyHex.replace(/^0x/,""));
+  if (subjectPrivateKeyHex) dSub = BigInt("0x"+subjectPrivateKeyHex.replace(/^0x/,""));
   else {
      const rd=(rng??defaultRng)(64);
      dSub=(bytesToBigInt(rd)%(q-1n))+1n;
@@ -286,78 +356,90 @@ export async function issueGost256Certificate(opts: IssueOptions): Promise<Issue
   const QxLE = beToLe(QxBE);
   const QyLE = beToLe(QyBE);
 
-  // subjectPublicKey: BIT STRING { OCTET STRING(QxLE||QyLE) } — как в python
+  // subjectPublicKey: BIT STRING { OCTET STRING(QxLE||QyLE) } — совместимо с твоей python-версией
   const pubkeyOctet = OCTET_STRING(concat(QxLE, QyLE));
+
+  // === SPKI.algorithm (ГОСТ-2012-256 с TC26-параметрами) ===
+  const pkParamSet = publicKeyParamSetOid ?? OID.TC26_256_A; // по умолчанию paramSetA
   const spkiAlgo = SEQ(
     OID_DER(OID.PUBKEY_2012_256),
-    SEQ(
-      OID_DER(OID.CPRO_XCHA),
-      OID_DER(OID.DIGEST_256)
-    )
+    SEQ(OID_DER(pkParamSet), OID_DER(OID.DIGEST_256)) // SEQUENCE { publicKeyParamSet, digestParamSet }
   );
   const spki = SEQ(spkiAlgo, BIT_STRING(pubkeyOctet, 0));
 
-  // Subject / Validity (CN: UTF8 если есть не-ASCII)
+  // === Subject / Validity (CN: Printable для ASCII, иначе UTF8) ===
   const isAscii = /^[\x20-\x7E]*$/.test(subjectCN);
   const cnValue = isAscii ? PrintableString(subjectCN) : UTF8String(subjectCN);
-
   const subjectName = SEQ(
     SET(SEQ(OID_DER(OID.EMAIL), IA5String(subjectEmail))),
     SET(SEQ(OID_DER(OID.CN),    cnValue))
   );
   const validity = SEQ(UTCTime(notBefore), UTCTime(notAfter));
 
-  /* -------- Extensions -------- */
+  /* ----------------- Extensions ----------------- */
 
-  // SKI: как в твоей python-версии — SHA-1 от содержимого subjectPublicKey (DER OCTET STRING внутри BIT STRING)
+  // SKI: SHA-1 от subjectPublicKey (используем DER OCTET внутри BIT STRING — как в твоём пайтон-коде)
   const ski = sha1(pubkeyOctet);
   const ext_ski = SEQ(
     OID_DER(OID.SKI),
     OCTET_STRING(OCTET_STRING(ski)) // extnValue ::= OCTET STRING( OCTET STRING(ski) )
   );
 
-  // KeyUsage: только digitalSignature; critical=TRUE; DER: 03 02 07 80
-  const kuBits = new Uint8Array([0x80]); // digitalSignature (bit 0)
-  const ext_ku = SEQ(
-    OID_DER(OID.KU),
-    BOOLEAN(true), // critical
-    OCTET_STRING(BIT_STRING(kuBits, 7)) // unused=7 для 1 значащего бита
-  );
+  // AKI: keyIdentifier + authorityCertIssuer(directoryName) + authorityCertSerialNumber
+  const aki_keyid = sha1(issuerSpkiSubjectPublicKey[0]===0x04 ? issuerSpkiSubjectPublicKey : issuerSpkiSubjectPublicKey);
+  const authorityKeyIdentifier = (() => {
+    const parts: Uint8Array[] = [];
+    parts.push(tlv(0x80, aki_keyid));                           // [0] keyIdentifier
+    const authorityCertIssuer = tlv(0xA1, SEQ( tlv(0xA4, issuerNameTLV) )); // [1] GeneralNames(directoryName)
+    parts.push(authorityCertIssuer);
+    const authorityCertSerial  = tlv(0x82, intContentForDER(issuerSerialInt)); // [2] INTEGER контент
+    parts.push(authorityCertSerial);
+    return SEQ(...parts);
+  })();
+  const ext_aki = SEQ(OID_DER(OID.AKI), OCTET_STRING(authorityKeyIdentifier));
 
-  // BasicConstraints: CA=FALSE; critical=TRUE
-  const bc_inner = SEQ(BOOLEAN(false)); // cA = FALSE
-  const ext_bc = SEQ(
-    OID_DER(OID.BC),
-    BOOLEAN(true),               // critical = TRUE
-    OCTET_STRING(bc_inner)
-  );
+  // KeyUsage + BasicConstraints (зависят от isCA)
+  let ext_ku: Uint8Array;
+  if (isCA) {
+    // keyCertSign(5), cRLSign(6)
+    const {bytes, unused} = bitStringFromBits([5,6]);
+    ext_ku = SEQ(OID_DER(OID.KU), BOOLEAN(true), OCTET_STRING(BIT_STRING(bytes, unused)));
+  } else {
+    // digitalSignature(0)
+    const {bytes, unused} = bitStringFromBits([0]);
+    ext_ku = SEQ(OID_DER(OID.KU), BOOLEAN(true), OCTET_STRING(BIT_STRING(bytes, unused)));
+  }
+  const bc_inner = isCA ? SEQ(BOOLEAN(true)) : SEQ(BOOLEAN(false));
+  const ext_bc = SEQ(OID_DER(OID.BC), BOOLEAN(true), OCTET_STRING(bc_inner));
 
-  // AKI: authorityCertIssuer (GeneralNames ::= SEQUENCE OF GeneralName) + authorityCertSerialNumber
-  // directoryName ::= [4] Name (EXPLICIT)
-  // authorityCertIssuer ::= [1] GeneralNames
-  const authorityCertIssuer = tlv(0xA1, SEQ( tlv(0xA4, issuerNameTLV) ));
-  const authorityCertSerial  = tlv(0x82, intToUnsigned(issuerSerialInt));
-  const aki_value = SEQ(authorityCertIssuer, authorityCertSerial);
-  const ext_aki = SEQ(OID_DER(OID.AKI), OCTET_STRING(aki_value));
+  // CRL Distribution Points (не критич.)
+  const ext_crldp = (crlDpUrls && crlDpUrls.length>0) ? extCRLDistributionPoints(crlDpUrls) : undefined;
 
-  // Extensions контейнер в TBSCertificate
-  const extensions = tlv(0xA3, SEQ(ext_ski, ext_ku, ext_bc, ext_aki));
+  // AIA (OCSP) — обычно только в конечных сертификатах
+  const needAIA = !isCA && (includeAIAForEE !== false) && !!ocspUrl;
+  const ext_aia = needAIA ? extAuthorityInfoAccessOcsp(ocspUrl!) : undefined;
 
-  // TBS
+  // Extensions контейнер [3] EXPLICIT
+  const extList = [ext_ski, ext_ku, ext_bc, ext_aki, ext_crldp, ext_aia].filter(Boolean) as Uint8Array[];
+  const extensions = tlv(0xA3, SEQ(...extList));
+
+  // === TBS ===
   const version = tlv(0xA0, INTEGER(2n)); // v3
   const serial  = INTEGER(serialNumber!=null ? BigInt(String(serialNumber)) : randomSerial());
   const sigAlg = SEQ(OID_DER(OID.SIGNWITHDIGEST_256));
 
   const tbs = SEQ(version, serial, sigAlg, issuerNameTLV, validity, subjectName, spki, extensions);
 
-  // Подпись TBS (ГОСТ: e — LE-интерпретация хэша)
+  // === Подпись TBS (ГОСТ: e = (H mod q); if 0 -> 1; H = Стрибог-256) ===
   const h = await Promise.resolve(streebog256(tbs));
   if (h.length!==32) throw new Error("streebog256 must return 32 bytes");
-  const e = bytesToBigInt(h.slice().reverse()) || 1n;
+  let e = bytesToBigInt(h.slice().reverse()) % curve.q;
+  if (e === 0n) e = 1n;
+
   const dIssuer = BigInt("0x"+issuerPrivateKeyHex.replace(/^0x/,""));
   const { r, s } = await Promise.resolve(gost3410_2012_256_sign(e, dIssuer, curve));
 
-  // signatureValue: BIT STRING с "сырыми" 64 байтами подписи; порядок/эндиян — как в твоём генераторе (s||r, BE)
+  // signatureValue: BIT STRING с "сырыми" 64B (s||r в BE) — как в RFC 9215 для X.509 (в CMS другая упаковка)
   const sigBytes = concat(bigIntToBE(s,32), bigIntToBE(r,32));
   const cert = SEQ(tbs, sigAlg, BIT_STRING(sigBytes, 0));
   const pem  = derToPem(cert, "CERTIFICATE");

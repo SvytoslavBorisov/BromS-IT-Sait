@@ -3,6 +3,8 @@
 // Совместимо с CryptoPro: подпись по H(der(signedAttrsSet)), signature = OCTET STRING(R||S в LE).
 // Автоматически подбирает signerIdentifier: SKI (если есть в сертификате) или issuerAndSerialNumber (если SKI нет).
 
+import { hexToBigInt } from "./espoint";
+
 /* ====== Типы ====== */
 export type Gost256CurveParams = { p: bigint; a: bigint; b: bigint; q: bigint; gx: bigint; gy: bigint; };
 export type Signer256 = (e: bigint, dPriv: bigint, params: Gost256CurveParams) =>
@@ -328,17 +330,23 @@ export async function buildCadesBesSignedData(opts: BuildCadesOptions): Promise<
   const signedAttrs_tagged = tlv(0xA0, signedAttrs_contentOnly); // [0] IMPLICIT
 
   // --- SignerIdentifier: SKI если есть, иначе issuer+serial
-  let sid: Uint8Array;
-  const ski = tryExtractSKI(certDer);
-  if (ski && ski.length) {
-    // subjectKeyIdentifier ::= [0] IMPLICIT OCTET STRING
-    sid = tlv(0x80, ski);
-  } else {
-    // issuerAndSerialNumber ::= SEQUENCE { issuer Name, serialNumber INTEGER }
-    const { issuerNameTLV, serial } = extractIssuerAndSerial(certDer);
-    const serialInt = integerFromUnsigned(serial);
-    sid = SEQ(issuerNameTLV, serialInt);
-  }
+let sid: Uint8Array;
+const ski = tryExtractSKI(certDer);
+const useSKI = !!(ski && ski.length);
+
+if (useSKI) {
+  // subjectKeyIdentifier ::= [0] IMPLICIT OCTET STRING
+  sid = tlv(0x80, ski);
+} else {
+  // issuerAndSerialNumber ::= SEQUENCE { issuer Name, serialNumber INTEGER }
+  const { issuerNameTLV, serial } = extractIssuerAndSerial(certDer);
+  const serialInt = integerFromUnsigned(serial);
+  sid = SEQ(issuerNameTLV, serialInt);
+}
+
+// version зависит от вида sid:
+const signerInfoVersion = useSKI ? 3n : 1n;
+
 
   // --- digestAlgorithm & signatureAlgorithm
   const digestAlgorithm = SEQ(OID_DER(OID.DIGEST_256));     // без параметров
@@ -347,23 +355,22 @@ export async function buildCadesBesSignedData(opts: BuildCadesOptions): Promise<
   // --- Подпись: e = H(der(SET signedAttrs))
   const H = await Promise.resolve(streebog256(signedAttrs_fullDER));
   if (H.length !== 32) throw new Error("streebog256 must return 32 bytes");
-  const e = bytesToBigInt(H.slice().reverse()) || 1n; // LE-интерпретация (ГОСТ)
-
-  const d = BigInt("0x" + privKeyHex.replace(/^0x/i, ""));
-  const { r, s } = await Promise.resolve(gost3410_2012_256_sign(e, d, curve));
+  let eInt = bytesToBigInt(H.slice().reverse()) % curve.q;
+  if (eInt === 0n) eInt = 1n;
+  const { r, s } = await gost3410_2012_256_sign(eInt, hexToBigInt(privKeyHex), curve);
   // CryptoPro: signature = OCTET STRING( R||S в LE )
   const sig = OCTET(concat(bigIntToLEfix32(r), bigIntToLEfix32(s)));
 
   // --- SignerInfo
   const signerInfo = SEQ(
-    INTEGER(1n),               // version = v1
-    sid,                       // sid
+    INTEGER(signerInfoVersion),
+    sid,
     digestAlgorithm,
-    signedAttrs_tagged,        // [0] IMPLICIT SET OF Attribute
+    signedAttrs_tagged,
     signatureAlgorithm,
-    sig                        // OCTET STRING
-    // unsignedAttrs отсутствуют
+    sig
   );
+
 
   // --- SignedData
   const signerInfos = SET(signerInfo);
