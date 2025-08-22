@@ -328,8 +328,10 @@ model Signatures {
   pem         String?
   type        String
 
-  documentId        String
-  document          Document         @relation("documentIdSignatures", fields:[documentId], references:[id])
+  path        String?
+
+  documentId        String?
+  document          Document?         @relation("documentIdSignatures", fields:[documentId], references:[id])
 
   userId      String
   user        User      @relation("usersSignatures", fields: [userId], references: [id])

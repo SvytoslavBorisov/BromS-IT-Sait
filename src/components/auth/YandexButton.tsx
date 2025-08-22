@@ -1,0 +1,20 @@
+"use client";
+import { signIn } from "next-auth/react";
+
+export function YandexTile() {
+  return (
+    <button
+      onClick={() => signIn("yandex", { callbackUrl: "/" })}
+      className="group relative flex items-center justify-center h-12 rounded-2xl bg-red-600 text-white
+                 ring-1 ring-black/10 hover:ring-black/20 transition overflow-hidden
+                 hover:scale-[1.03] active:scale-[0.98] duration-200 ease-out"
+      aria-label="Войти через Яндекс"
+    >
+      <span className="absolute inset-0 -translate-x-full group-hover:translate-x-0 transition-transform duration-500
+                       bg-gradient-to-r from-white/0 via-white/15 to-white/0" />
+      <span className="text-xl font-black leading-none transform group-hover:scale-110 transition-transform">
+        Я
+      </span>
+    </button>
+  );
+}

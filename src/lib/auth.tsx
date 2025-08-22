@@ -5,6 +5,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcrypt";
+import YandexProvider from "next-auth/providers/yandex";
 
 // ⬇️ новый логгер
 import { logger, ensureRequestId } from "@/lib/logger";
@@ -128,6 +129,28 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           image: user.image,
+        };
+      },
+    }),
+    YandexProvider({
+      clientId: process.env.YANDEX_CLIENT_ID!,
+      clientSecret: process.env.YANDEX_CLIENT_SECRET!,
+      authorization: { params: { scope: "login:email login:info" } },
+      profile(profile) {
+        return {
+          id: profile.id?.toString(),
+          name:
+            profile.display_name ||
+            profile.real_name ||
+            profile.login ||
+            "Yandex User",
+          email:
+            (profile.default_email as string | undefined) ||
+            (Array.isArray(profile.emails) ? profile.emails[0] : undefined) ||
+            null,
+          image: profile.default_avatar_id
+            ? `https://avatars.yandex.net/get-yapic/${profile.default_avatar_id}/islands-200`
+            : null,
         };
       },
     }),
