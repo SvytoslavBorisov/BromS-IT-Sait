@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (!slug) return NextResponse.json({ error: "slug required" }, { status: 400 });
 
   const base = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
-  const url = `${base}/blog/${encodeURIComponent(slug)}?print=1`;
+  const url = `${base}/crypto/blog/${encodeURIComponent(slug)}?print=1`;
 
   const browser = await puppeteer.launch({
     headless: true,                     // <-- фикс

@@ -1,14 +1,12 @@
-import React from "react";
-import CryptoLandingClient from "./CryptoLandingClient"; // клиентский компонент
+"use client";
 
-export const metadata = {
-  title: "Broms IT — Криптографические сервисы",
-  description:
-    "Страница /crypto: логотип, миссия, статьи и открытые инструменты по криптографии ГОСТ и не только.",
-  alternates: { canonical: "/crypto" },
-};
+import React from "react";
+import BookFlip from "./BookFlip"; // компонент с переворотом страницы
 
 export default function Page() {
-  // можно пробрасывать данные как пропсы, если понадобятся
-  return <CryptoLandingClient />;
+  return (
+    <div>
+      <BookFlip />
+    </div>
+  );
 }

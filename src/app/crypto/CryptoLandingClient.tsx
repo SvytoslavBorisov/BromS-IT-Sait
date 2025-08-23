@@ -22,10 +22,10 @@ const articlePlaceholders = [
 ];
 
 const publicTools = [
-  { icon: Wrench,    title: "Хэш‑утилита",       text: "Проверка/генерация хэшей (Стрибог‑256, SHA‑2/3)" },
-  { icon: KeyRound,  title: "Генерация ключей",  text: "Демо‑генерация пар ключей (локально, без сервера)" },
-  { icon: ScrollText,title: "Проверка подписи",  text: "Проверить подпись файла/строки в браузере" },
-  { icon: Globe,     title: "Случайность",       text: "Калькулятор энтропии и генератор случайных строк" },
+  { icon: Wrench,    title: "Хэш‑утилита",       text: "Проверка/генерация хэшей (Стрибог‑256, SHA‑2/3)", link: '/crypto/random' },
+  { icon: KeyRound,  title: "Генерация ключей",  text: "Демо‑генерация пар ключей (локально, без сервера)", link: '/crypto/random' },
+  { icon: ScrollText,title: "Проверка подписи",  text: "Проверить подпись файла/строки в браузере", link: '/crypto/random' },
+  { icon: Globe,     title: "Случайность",       text: "Калькулятор энтропии и генератор случайных строк", link: '/crypto/random' },
 ];
 
 export default function CryptoLandingClient() {
@@ -46,7 +46,7 @@ export default function CryptoLandingClient() {
 
             <motion.p className="max-w-2xl text-balance text-muted-foreground"
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
-              «Делаем сложную криптографию простой»: инструменты для хэширования, электронных подписей и
+              «Делаем сложную криптографию очень простой»: инструменты для хэширования, электронных подписей и
               порогового разделения секрета прямо в браузере.
             </motion.p>
 
@@ -82,7 +82,7 @@ export default function CryptoLandingClient() {
       <section id="articles" className="mx-auto max-w-6xl px-6 py-6 md:py-10">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Статьи</h2>
-          <Button variant="ghost" asChild><Link href="/blog">Все статьи <ArrowRight className="ml-1 h-4 w-4" /></Link></Button>
+          <Button variant="ghost" asChild><Link href="/crypto/blog">Все статьи <ArrowRight className="ml-1 h-4 w-4" /></Link></Button>
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
@@ -106,7 +106,7 @@ export default function CryptoLandingClient() {
       </section>
 
       {/* PUBLIC TOOLS */}
-      <section id="tools" className="mx-auto max-w-6xl px-6 py-6 md:py-12">
+      <section id="tools" className="z-100 mx-auto max-w-6xl px-6 py-6 md:py-12">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Открытые инструменты</h2>
           <p className="text-sm text-muted-foreground">Доступны без регистрации. Работают прямо в браузере.</p>
@@ -123,7 +123,7 @@ export default function CryptoLandingClient() {
                 <CardDescription className="text-sm leading-relaxed">{t.text}</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button asChild><Link href="#">Открыть</Link></Button>
+                <Button variant="ghost" className="px-0" asChild><Link href={t.link}>Открыть</Link></Button>
               </CardContent>
             </Card>
           ))}
