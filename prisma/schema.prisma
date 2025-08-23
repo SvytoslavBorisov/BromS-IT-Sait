@@ -107,6 +107,24 @@ model User {
   telegramLastAuthAt   DateTime?                    // время последней успешной валидации hash/initData
 
   @@index([telegramUsername])
+
+
+    /// Публичный E2E-ключ транспорта (для шифрования долей мне)
+  e2ePublicKey    String?  @unique
+  e2ePublicKeyAlg String   @default("ECIES-GOST-2012-256") // или что фактически используешь
+
+  // Dealerless DKG
+  dkgParticipants  DkgParticipant[]
+  dkgCommitments   DkgCommitment[]
+  dkgSharesFrom    DkgShareOutbox[]  @relation("dkgSharesFrom")
+  dkgSharesTo      DkgShareOutbox[]  @relation("dkgSharesTo")
+  dkgReadiness     DkgReady[]
+  dkgComplaintsAsAccuser DkgComplaint[] @relation("complaintsAccuser")
+  dkgComplaintsAsAccused DkgComplaint[] @relation("complaintsAccused")
+   dkgSessionsCreated       DkgSession[]     @relation("DkgSessionCreatedBy")
+   DkgRecoveryShare       DkgRecoveryShare[]     @relation("DkgRecoveryShareUser")
+   DkgRecoveryParticipant DkgRecoveryParticipant[] @relation("DkgRecoveryParticipantUser")
+   DkgRecoverySession DkgRecoverySession[] @relation("DkgRecoverySessionUser")
 }
 
 model UserSettings {
@@ -402,6 +420,148 @@ model ChatMessage {
   // @@index([room, ts])
 }
 
+
+model DkgSession {
+  id          String           @id @default(cuid())
+  title       String?          @default("")
+  n           Int
+  t           Int
+  epoch       String           @default("2025Q3")
+  status      DkgSessionStatus @default(LOBBY)
+
+  createdById String?
+  createdBy   User? @relation("DkgSessionCreatedBy", fields: [createdById], references: [id])
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  participants  DkgParticipant[]
+  commitments   DkgCommitment[]
+  shares        DkgShareOutbox[]
+  readiness     DkgReady[]
+  complaints    DkgComplaint[]
+
+  DkgRecoverySession DkgRecoverySession[] @relation("DkgRecoverySessionDkgSession")
+
+  @@index([status, createdAt])
+}
+
+model DkgParticipant {
+  id         String     @id @default(cuid())
+  sessionId  String
+  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // дублируем на момент входа — чтобы участник мог поменять ключ позже, а сессия осталась консистентной
+  e2ePublicKey    String
+  e2ePublicKeyAlg String   @default("ECIES-GOST-2012-256")
+
+  isHost     Boolean    @default(false)
+  joinedAt   DateTime   @default(now())
+  leftAt     DateTime?
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+}
+
+model DkgCommitment {
+  id         String     @id @default(cuid())
+  sessionId  String
+  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  fromUserId String
+  fromUser   User       @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  // массив точек C_k = a_k*G (храним как JSON: [{x:"hex", y:"hex"}, ...])
+  commitments Json
+  // опционально: хеш сериализации коммитментов, чтобы быстро сверять
+  commitmentsHash String
+
+  // подпись отправителя коммитментов (формат на твоё усмотрение: hex/base64)
+  signature  String
+
+  createdAt  DateTime   @default(now())
+
+  @@unique([sessionId, fromUserId]) // один набор на участника в сессии
+  @@index([sessionId])
+}
+
+model DkgShareOutbox {
+  id         String     @id @default(cuid())
+  sessionId  String
+  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  fromUserId String
+  fromUser   User       @relation("dkgSharesFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  toUserId   String
+  toUser     User       @relation("dkgSharesTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  // шифртекст персональной доли s_{from->to} (ECIES на e2ePublicKey получателя)
+  ciphertext Bytes
+  // AAD/transcript hash, чтобы исключить replay между сессиями
+  transcriptHash String
+
+  // подпись метаданных отправителем (identity-подпись)
+  signature  String
+
+  status     DkgShareDelivery @default(SENT)
+  createdAt  DateTime         @default(now())
+  deliveredAt DateTime?
+  readAt     DateTime?
+
+  @@unique([sessionId, fromUserId, toUserId]) // не дублируем
+  @@index([sessionId, toUserId, status])
+}
+
+model DkgReady {
+  id         String     @id @default(cuid())
+  sessionId  String
+  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // хеш публичного ключа Q (например, H(ser(Q)))
+  Qhash      String
+
+  // опционально: хеш всего транскрипта (для аудита)
+  transcriptHash String
+
+  createdAt  DateTime   @default(now())
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+}
+
+model DkgComplaint {
+  id         String     @id @default(cuid())
+  sessionId  String
+  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // кто жалуется и на кого
+  accuserId  String
+  accuser    User       @relation("complaintsAccuser", fields: [accuserId], references: [id], onDelete: Cascade)
+
+  accusedId  String
+  accused    User       @relation("complaintsAccused", fields: [accusedId], references: [id], onDelete: Cascade)
+
+  // произвольное описание/тип
+  reason     String      @default("")
+
+  // полезная нагрузка (например: раскрытая спорная доля, индексы, пруфы)
+  payload    Json
+
+  status     DkgComplaintStatus @default(OPEN)
+  createdAt  DateTime           @default(now())
+  resolvedAt DateTime?
+
+  @@index([sessionId, status])
+}
+
+
 //
 //   ENUMS
 //
@@ -432,4 +592,100 @@ enum ShamirSessionStatus {
 enum Sex {
   MALE
   FEMALE
+}
+
+enum DkgSessionStatus {
+  LOBBY    // лобби: ждём N из N
+  ROUND1   // публикация коммитментов
+  ROUND2   // обмен зашифрованными долями
+  ROUND3   // проверка и финал
+  FINAL    // завершено успешно
+  ABORTED  // остановлено/оспорено
+}
+
+enum DkgShareDelivery {
+  SENT
+  DELIVERED
+  READ
+  REJECTED
+}
+
+enum DkgComplaintStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+enum DkgRecoveryStatus {
+  OPEN
+  VERIFYING
+  DONE
+  FAILED
+}
+
+model DkgRecoverySession {
+  id               String            @id @default(cuid())
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  // источник — исходная DKG-сессия
+  sourceSessionId  String
+  sourceSession    DkgSession        @relation("DkgRecoverySessionDkgSession", fields: [sourceSessionId], references: [id], onDelete: Cascade)
+
+  // инварианты/контекст для связывания
+  qHash            String            // H(ser(Q)) из исходной сессии
+  n                Int
+  t                Int
+  epoch            String
+
+  // кто запросил восстановление (кому отдадим зашифрованный результат)
+  requesterUserId  String
+  requester        User              @relation("DkgRecoverySessionUser", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  requesterPubKey  String            // hex; ECIES-ключ транспорта
+
+  status           DkgRecoveryStatus @default(OPEN)
+
+  // финальный результат (только зашифрованный артефакт)
+  resultCiphertext String?
+  resultMeta       String?
+
+  participants     DkgRecoveryParticipant[]
+  shares           DkgRecoveryShare[]
+
+  @@index([sourceSessionId, status, createdAt])
+}
+
+model DkgRecoveryParticipant {
+  id          String             @id @default(cuid())
+  joinedAt    DateTime           @default(now())
+
+  recoveryId  String
+  recovery    DkgRecoverySession @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User               @relation("DkgRecoveryParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  e2ePublicKey String?           // для удобства (дублируем, как в DkgParticipant)
+
+  @@unique([recoveryId, userId])
+  @@index([recoveryId])
+}
+
+model DkgRecoveryShare {
+  id          String             @id @default(cuid())
+  createdAt   DateTime           @default(now())
+
+  recoveryId  String
+  recovery    DkgRecoverySession @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
+
+  fromUserId  String
+  fromUser    User               @relation("DkgRecoveryShareUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  // итоговая доля sᵢ участника i (hex, BE). Проверяем по агрегированным коммитментам.
+  s_i_hex     String
+  proofOk     Boolean            @default(false)
+  note        String             @default("")
+
+  @@unique([recoveryId, fromUserId])
+  @@index([recoveryId])
 }

@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+@media print {
+  @page { size: A4; margin: 16mm; }
+  body { background: white !important; }
+  header, nav, footer, .no-print { display: none !important; }
+  article { max-width: 100% !important; }
+  pre, code { page-break-inside: avoid; }
+  h1, h2, h3 { page-break-after: avoid; }
+}
