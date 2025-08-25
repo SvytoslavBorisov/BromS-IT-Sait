@@ -2,6 +2,8 @@
 "use client";
 
 import "@/app/tailwind.css";
+import "katex/dist/katex.min.css";
+import "@/styles/latex.css";    
 import { Providers } from "./providers";
 import type { ReactNode } from "react";
 import { Poppins } from "next/font/google";

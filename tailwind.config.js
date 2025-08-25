@@ -5,8 +5,24 @@ module.exports = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  theme: {
-    extend: {},
+ theme: {
+    extend: {
+      typography: ({ theme }) => ({
+        DEFAULT: {
+          css: {
+            h2: {
+              fontSize: theme("fontSize.2xl"),
+              fontWeight: theme("fontWeight.semibold"),
+              color: theme("colors.gray.800"),
+            },
+            h3: {
+              fontSize: theme("fontSize.xl"),
+              fontWeight: theme("fontWeight.semibold"),
+            },
+          },
+        },
+      }),
+    },
   },
   plugins: [],
 };

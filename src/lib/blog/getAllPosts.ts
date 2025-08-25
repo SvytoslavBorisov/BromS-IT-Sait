@@ -15,7 +15,7 @@ export async function getAllPosts(): Promise<PostSummary[]> {
 
   const posts: PostSummary[] = [];
   for (const slug of entries) {
-    const mdxPath = path.join(BLOG_DIR, slug, "index.mdx");
+    const mdxPath = path.join(BLOG_DIR, slug, "index.tex");
     try {
       const raw = await fs.readFile(mdxPath, "utf8");
       const { data } = matter(raw);

@@ -261,8 +261,9 @@ async function attr_signingCertificateV2(certDer: Uint8Array, streebog256: Hash2
     OCTET(h)
   );
   // SigningCertificateV2 ::= SEQUENCE OF ESSCertIDv2
-  const seqOf = tlv(0x30, ess);
-  return attr(OID.signingCertificateV2, SEQ(seqOf));
+const seqOf = tlv(0x30, ess); // SEQUENCE OF ESSCertIDv2
+// ✅ без дополнительного SEQUENCE-слоя
+return attr(OID.signingCertificateV2, seqOf);
 }
 
 /* ====== сортировка элементов в SET по DER-байтам ====== */

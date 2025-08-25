@@ -152,7 +152,7 @@ export default function ProfilePage() {
   const isLoading = status === "loading";
 
   return (
-    <div className="min-h-screen flex bg-gray-100">
+    <div className="min-h-screen flex bg-gray-100 text-black">
       {/* Сайдбар: в гостевом режиме делаем его «узким» и неактивным */}
       <Sidebar
         activeTab={isOwn ? activeTab : "profile"}

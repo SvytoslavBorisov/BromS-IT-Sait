@@ -1,3 +1,51 @@
 @import "tailwindcss";
 
 
+/* Tailwind Typography уже даёт базовую «prose». Докручиваем под TeX/KaTeX. */
+
+/* 2.1 MathML (на случай, если KaTeX CSS не успел): гарантированно скрыть */
+.tex-content .katex .katex-mathml {
+  position: absolute !important;
+  left: 0; top: 0;
+  width: 1px; height: 1px;
+  overflow: hidden; clip: rect(1px,1px,1px,1px);
+  padding: 0; border: 0;
+}
+
+/* 2.2 Размеры/отступы формул */
+.tex-content .katex { font-size: 1.06em; }               /* чуть крупнее inline */
+.tex-content .katex-display { margin: 1rem 0 1.25rem; }  /* приятные отступы */
+
+/* 2.3 Кодовые блоки из lstlisting: сохранить переносы, добавить скролл/рамку */
+.tex-content pre {
+  white-space: pre;           /* не схлопывать пробелы */
+  white-space: pre-wrap;      /* переносить длинные строки */
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  border: 1px solid hsl(0 0% 90%);
+  padding: 1rem;
+}
+.dark .tex-content pre { border-color: hsl(0 0% 25%); }
+
+/* 2.4 Центральный титул (begin{center}) — сделать как герой-блок */
+.tex-content .text-center .text-2xl.font-semibold strong {
+  font-weight: 800;           /* жирнее заголовок */
+  line-height: 1.15;
+  display: inline-block;
+}
+.tex-content .text-center em { opacity: 0.9; }
+
+/* 2.5 Списки компактнее */
+.tex-content ul, .tex-content ol { margin-top: 0.5rem; margin-bottom: 1rem; }
+.tex-content li + li { margin-top: 0.25rem; }
+.tex-content h2 {
+  @apply text-2xl font-semibold mt-6 mb-3;
+}
+
+.tex-content h3 {
+  @apply text-xl font-semibold mt-5 mb-2;
+}
+
+.tex-content h4 {
+  @apply text-lg font-medium mt-4 mb-2;
+}

@@ -1,0 +1,194 @@
+---
+title: "Схемы разделения секрета с возможностью вето"
+description: "Перевод статьи C. Blundo, A. De Santis, L. Gargano, U. Vaccaro (EUROCRYPT, 1993) с пояснениями, формулами и разбором алгоритмов на основе кодов Рида–Соломона."
+date: "2025-08-24"
+tags:
+  - Криптография
+  - Пороговые схемы
+  - Secret Sharing
+  - Reed–Solomon Codes
+  - Вето
+cover: "/content/blog/secret-sharing-scheme-with-veto/cover.png"
+license: "© Автор перевода, 2025. Только некоммерческое использование."
+source:
+  title: "C. Blundo, A. De Santis, L. Gargano, U. Vaccaro — Secret Sharing Schemes with Veto Capabilities"
+  booktitle: "Advances in Cryptology — EUROCRYPT’93, LNCS 765"
+  pages: "461–471"
+  publisher: "Springer-Verlag"
+  doi: "10.1007/3-540-48285-7_38"
+  url: "https://doi.org/10.1007/3-540-48285-7_38"
+  type: "translation"
+---
+
+
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{listings}
+
+% Настройки заголовков
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+
+% Настройки листингов
+\lstdefinestyle{py}{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\bfseries\color{teal!60!black},
+  commentstyle=\itshape\color{gray!70!black},
+  stringstyle=\color{orange!60!black},
+  showstringspaces=false,
+  columns=fullflexible,
+  breaklines=true,
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{gray!40},
+  backgroundcolor=\color{gray!5},
+  tabsize=2
+}
+
+\title{Схемы разделения секрета с возможностью вето}
+\author{C. Blundo \and A. De Santis \and L. Gargano \and U. Vaccaro}
+\date{EUROCRYPT'93}
+
+\begin{document}
+
+\begin{center}
+{\LARGE \textbf{Схемы разделения секрета с возможностью вето}}\\[0.5em]
+\emph{Перевод статьи C. Blundo, A. De Santis, L. Gargano, U. Vaccaro (EUROCRYPT, 1993) с пояснениями, формулами и разбором алгоритмов на основе кодов Рида–Соломона.}\\[0.5em]
+\small Дата: 24 августа 2025 \quad
+Теги: Криптография; Пороговые схемы; Secret Sharing; Reed–Solomon; Вето.\\[0.25em]
+\small Лицензия: © Автор перевода, 2025. Только некоммерческое использование.\\[0.25em]
+\small Источник: C. Blundo, A. De Santis, L. Gargano, U. Vaccaro — Secret Sharing Schemes with Veto Capabilities,\\
+LNCS 765, EUROCRYPT’93, Springer-Verlag, DOI: \href{https://doi.org/10.1007/3-540-48285-7_38}{10.1007/3-540-48285-7\_38}.
+\end{center}
+
+\vspace{0.5em}
+\hrule
+\vspace{1em}
+
+\begin{center}
+Схема разделения секрета обеспечивает такое распределение секретной информации между участниками, при котором только специально определённые (квалифицированные) подмножества могут восстановить секрет, в то время как все прочие (неквалифицированные) множества не получают о нём абсолютно никакой информации. В статье рассматривается задача разработки эффективных схем разделения секрета, обладающих дополнительным свойством: квалифицированные меньшинства участников могут наложить запрет (право вето) на реконструкцию секретного ключа другими подмножествами. Показано, что известные методы теории кодирования с исправлением ошибок позволяют модифицировать классическую схему разделения секрета Шамира для решения этой более общей задачи.
+\end{center}
+
+\section{Введение}
+
+\textit{Схема разделения секрета} --- это протокол распределения секрета $S$ между множеством участников $\PP$ таким образом, что участники из подмножеств $A \subseteq \PP$, допущенных к восстановлению, могут, объединив свои сведения, реконструировать секрет; участники же из подмножеств $B \subseteq \PP$, не допущенных к восстановлению, не получают никакой информации о $S$.
+
+Схемы разделения секрета полезны в задачах, требующих совместного участия заранее определённой группы лиц (запуск ракеты, открытие банковского хранилища или сейфовой ячейки), а также при управлении криптографическими ключами и в многосторонних защищённых протоколах.
+
+\textit{Структура доступа} для схемы разделения секрета --- это семейство всех подмножеств участников, которым разрешено восстанавливать секрет. \emph{$(k,n)$‑пороговая схема} определяется на множестве из $n$ участников; её структура доступа состоит из всех подмножеств мощности не меньше $k$. Пороговые схемы были предложены Блейкли и Шамиром; позже было получено множество альтернативных конструкций.
+
+Также изучались \enquote{расширенные возможности} схем разделения секрета: защита от мошенничества со стороны участников, отсутствие доверенной стороны, исключение участников, отказоустойчивость, предварительное распределение и др. Современные обзоры приведены у Стинсона и Саймонса.
+
+В этой работе рассматривается проектирование схем разделения секрета, где квалифицированные меньшинства могут запрещать реконструкцию секрета другими множествами участников. Мы показываем, что хорошо известные инструменты из теории кодов позволяют модифицировать классическую схему Шамира; алгоритмы распределения и восстановления при этом вычислительно эффективны благодаря быстрому декодированию кодов Рида–Соломона.
+
+\section{Формальная постановка}
+
+Пусть $\PP$ --- множество из $n$ участников, а $\mathcal{S}$ --- множество секретов. Пусть при объединении любого подмножества $X \subseteq \PP$ его участники делятся на две категории:
+\begin{itemize}[nosep]
+  \item \textbf{тип $\GG$} --- участники, желающие восстановить секрет (\enquote{положительные голоса});
+  \item \textbf{тип $\BB$} --- участники, желающие запретить восстановление (\enquote{отрицательные голоса}).
+\end{itemize}
+
+\noindent\textbf{$(t,s,n)$‑пороговая схема с вето} --- это алгоритм, выдающий каждому участнику две доли (положительную и отрицательную), причём выполняются условия:
+\begin{enumerate}[label=\textbullet, leftmargin=1.5em, itemsep=2pt]
+  \item любые $t$ (или больше) участников типа $\GG$ совместно с не более чем $(s-1)$ участниками типа $\BB$ однозначно определяют секрет;
+  \item если участников типа $\GG$ меньше $t$, секрет не восстанавливается при любом числе участников типа $\BB$;
+  \item секрет не восстанавливается, если активно более чем $(s-1)$ участников типа $\BB$.
+\end{enumerate}
+
+\section{Коды Рида–Соломона и базовые свойства}
+
+Ключевую роль играют коды Рида–Соломона. Пусть $\{\alpha_1,\ldots,\alpha_\ell\}$ --- фиксированный набор ненулевых элементов поля $\GF(q^m)$, а $P_r[x]$ --- множество всех многочленов степени $\le r-1$ над $\GF(q^m)$. Код $\RS(\ell,r)$ длины $\ell=q^m-1$ и размерности $r$ определяется как
+\begin{equation}\label{eq:RS}
+  \RS(\ell,r)=\bigl\{\, C=(C_1,\ldots,C_\ell):~ C_i=f(\alpha_i),~ i=1,\ldots,\ell,~ f(x)\in P_r[x] \,\bigr\}.
+\end{equation}
+
+Если $S\in\GF(q^m)$ и $f(x)\in P_r[x]$ выбран случайно так, что $f(0)=S$, то координаты соответствующего кодового слова служат долями. Если доступны $k$ значений, из которых $k-e$ --- истинные доли, а $e$ --- случайные элементы поля, то восстановление $f(x)$ (и $S=f(0)$) возможно тогда и только тогда, когда $k-2e\ge r$; существующие алгоритмы работают за $O(\ell\log^2 \ell)$ операций в $\GF(q^m)$.
+
+\section{Схемы с возможностями вето}
+
+\subsection{$(t,1,n)$‑пороговая схема}
+
+Опишем простую схему. Пусть $\PP=\{P_1,\ldots,P_n\}$ и выбран код $\RS(\ell,2t-1)$, $\ell=q^m-1$. Каждый участник $P_i$ получает \emph{две} доли: положительную и отрицательную.
+
+\paragraph{Алгоритм распределения.}
+\begin{framed}
+\textbf{Вход:} секрет $S\in\GF(q^m)$, множество $\PP$, целое $t\ge2$.
+
+Выбрать случайно $S_1,S_2\in\GF(q^m)$ так, что $S=S_1\oplus S_2$ (поэлементное сложение по модулю простого $q$).
+
+Выбрать случайно $f(x)\in P_{2t-1}[x]$ с $f(0)=S_1$. Для каждого $i$ сформировать векторы $W_i^P$ и $W_i^N$, включающие значения $f(\cdot)$ в фиксированных точках и независимые случайные элементы поля (как в оригинальной конструкции), причём все случайные значения попарно различны.
+
+Выбрать случайно $g(x)\in P_t[x]$ с $g(0)=S_2$.
+
+\textbf{Выход:} участнику $P_i$ выдать пару долей $(S_i^P,S_i^N)$, где $S_i^P=W_i^P(\beta_i)$ (положительная) и $S_i^N=W_i^N(\beta_i)$ (отрицательная).
+\end{framed}
+
+\paragraph{Восстановление.}
+Активный участник передаёт машине восстановления либо положительную, либо отрицательную долю. Машина сначала интерполирует $g(x)$ по значениям $g(\beta_i)$ (получая $S_2=g(0)$), затем применяет декодирование с ошибками/стираниями к части долей, связанной с $f(x)$ (получая $S_1=f(0)$), после чего $S=S_1\oplus S_2$. Если хотя бы один участник даёт отрицательную долю, число ошибок превышает корректирующую способность $\RS(\ell,2t-1)$ и восстановление $f(x)$ становится невозможным.
+
+\subsection{$(t,s,n)$‑пороговая схема}
+
+Построим общую схему на основе набора независимых $(t,1,n)$‑схем.
+
+\paragraph{Алгоритм распределения.}
+\begin{framed}
+\textbf{Вход:} секрет $S\in\GF(q^m)$, множество $\PP$, параметры $t$ и $s$.
+
+Выбрать случайно $f(x)\in P_{n-s+1}[x]$ так, что $f(0)=S$; положить $S_i=f(\beta_i)$ для $i=1,\ldots,n$ (классическая $(n-s+1,n)$‑пороговая схема).
+
+Для каждого $i$ независимо применить $(t,1,n)$‑схему к значению $S_i$, получив для участника $P_j$ пару долей $(S_{i,j}^P,S_{i,j}^N)$.
+
+\textbf{Выход:} участнику $P_j$ выдать совокупности $W_j^P=(S_{1,j}^P,\ldots,S_{n,j}^P)$ и $W_j^N=(S_{1,j}^N,\ldots,S_{n,j}^N)$.
+\end{framed}
+
+\paragraph{Восстановление.}
+Пусть активно $k=m+p$ участников: $m$ с положительными и $p$ с отрицательными долями. Для каждого индекса $i$ машина пытается восстановить $S_i$ из набора $\{S_{i,j}^{Q_j}\}$: это удаётся тогда и только тогда, когда хотя бы $t$ участников дали положительные доли и ни один --- отрицательную долю для данного $i$. Поскольку секрет $S$ восстанавливается из как минимум $n-s+1$ значений $S_i$, получаем критерий: секрет $S$ восстанавливается тогда и только тогда, когда по крайней мере $t$ участников проголосовали \enquote{за}, и не более $s-1$ участников проголосовали \enquote{против}.
+
+\section{Заключение}
+
+Показано, что коды Рида–Соломона позволяют строить схемы разделения секрета с правом вето. Предложенные алгоритмы распределения и восстановления вычислительно эффективны, так как опираются на быстрое декодирование кодов Рида–Соломона.
+
+\begin{thebibliography}{29}
+\bibitem{AsmuthBloom83} C.~Asmuth, J.~Bloom. A Modular Approach to Key Safeguarding. \textit{IEEE Trans.\ on Information Theory}, IT-29(2), 1983, 208--210.
+\bibitem{Beutelspacher89} A.~Beutelspacher. How to Say `No'. In: \textit{Advances in Cryptology -- EUROCRYPT~'89}, LNCS 434, Springer, 491--496.
+\bibitem{BenalohLeichter88} J.~C.~Benaloh, J.~Leichter. Generalized Secret Sharing and Monotone Functions. In: \textit{CRYPTO~'88}, LNCS 403, Springer, 27--35.
+\bibitem{Blakley79} G.~R.~Blakley. Safeguarding Cryptographic Keys. In: \textit{Proc.\ AFIPS NCC}, 1979, 313--317.
+\bibitem{Blundo93InfoRate} C.~Blundo, A.~De~Santis, L.~Gargano, U.~Vaccaro. On the Information Rate of Secret Sharing Schemes. In: \textit{CRYPTO~'92}, LNCS 740, Springer, 148--169 (1993).
+\bibitem{BlundoEurocrypt92} C.~Blundo, A.~De~Santis, D.~R.~Stinson, U.~Vaccaro. Graph Decomposition and Secret Sharing Schemes. In: \textit{EUROCRYPT~'92}, LNCS 658, Springer, 1--24 (1993).
+\bibitem{BlundoIT} C.~Blundo, A.~De~Santis, A.~Gaggia, U.~Vaccaro. New Bounds on the Information Rate of Secret Sharing Schemes. \textit{IEEE Trans.\ on Information Theory}, to appear.
+\bibitem{BlundoSTACS93} C.~Blundo, A.~De~Santis, U.~Vaccaro. Efficient Sharing of Many Secrets. In: \textit{STACS '93}, LNCS 665, Springer, 1993.
+\bibitem{BlundoCrypto93} C.~Blundo, A.~Cresti, A.~De~Santis, U.~Vaccaro. Fully Dynamic Secret Sharing Schemes. In: \textit{CRYPTO~'93}, LNCS, Springer, to appear.
+\bibitem{BrickellStinson92a} E.~F.~Brickell, D.~R.~Stinson. Improved Bounds on the Information Rate of Perfect Secret Sharing Schemes. \textit{J.~Cryptology}, 5(3), 1992, 153--166.
+\bibitem{BrickellStinson91b} E.~F.~Brickell, D.~R.~Stinson. The Detection of Cheaters in Threshold Schemes. \textit{SIAM J.\ Discrete Math.}, 4, 1991, 502--510.
+\bibitem{Capocelli93} R.~M.~Capocelli, A.~De~Santis, L.~Gargano, U.~Vaccaro. On the Size of Shares for Secret Sharing Schemes. \textit{J.~Cryptology}, 6, 1993, 157--167.
+\bibitem{GMW87} O.~Goldreich, S.~Micali, A.~Wigderson. How to Play any Mental Game. In: \textit{Proc.\ 19th ACM STOC}, 1987, 218--229.
+\bibitem{Karnin83} E.~D.~Karnin, J.~W.~Greene, M.~E.~Hellman. On Secret Sharing Systems. \textit{IEEE Trans.\ on Information Theory}, IT-29(1), 1983, 35--41.
+\bibitem{IngemarsonSimmons91} I.~Ingemarson, G.~J.~Simmons. A Protocol to Set Up Shared Secret Schemes Without the Assistance of a Mutually Trusted Party. LNCS 473, 1991, 266--282.
+\bibitem{McElieceSarwate81} R.~J.~McEliece, D.~Sarwate. On Sharing Secrets and Reed--Solomon Codes. \textit{Communications of the ACM}, 24(9), 1981, 583--584.
+\bibitem{MacWilliamsSloane77} F.~J.~MacWilliams, N.~J.~A.~Sloane. \textit{The Theory of Error-Correcting Codes}. North-Holland, 1977.
+\bibitem{RabinBenOr89} T.~Rabin, M.~Ben-Or. Verifiable Secret Sharing and Multiparty Protocols with Honest Majority. In: \textit{Proc.\ 21st ACM STOC}, 1989, 73--85.
+\bibitem{ReedSolomon60} I.~S.~Reed, G.~Solomon. Polynomial Codes over Certain Finite Fields. \textit{SIAM J.\ Appl.\ Math.}, June 1960, 300--304.
+\bibitem{Sarwate77} D.~Sarwate. On the Complexity of Decoding Goppa Codes. \textit{IEEE Trans.\ on Information Theory}, 23, 1977, 515--516.
+\bibitem{Shamir79} A.~Shamir. How to Share a Secret. \textit{Communications of the ACM}, 22(11), 1979, 612--613.
+\bibitem{Stinson92} D.~R.~Stinson. An Explication of Secret Sharing Schemes. \textit{Designs, Codes and Cryptography}, 2, 1992, 357--390.
+\bibitem{Stinson92b} D.~R.~Stinson. New General Lower Bounds on the Information Rate of Secret Sharing Schemes. In: \textit{Proc.\ Crypto '92}, LNCS, Springer, to appear.
+\bibitem{Simmons91} G.~J.~Simmons. An Introduction to Shared Secret and/or Shared Control Schemes and Their Application. In: \textit{Contemporary Cryptology}, IEEE Press, 1991, 441--497.
+\bibitem{Simmons89Robust} G.~J.~Simmons. Robust Shared Secret Schemes or ``How to Be Sure You Have the Right Answer Even Though You Don't Know the Question''. \textit{Congressus Numerantium}, 8, 1989, 215--248.
+\bibitem{Simmons90Prepos} G.~J.~Simmons. Prepositioned Shared Secret and/or Shared Control Schemes. LNCS 434, 1990, 436--467.
+\bibitem{StinsonVanstone88} D.~R.~Stinson, S.~A.~Vanstone. A Combinatorial Approach to Threshold Schemes. \textit{SIAM J.\ Discrete Math.}, 1(2), 1988, 230--236.
+\bibitem{TompaWoll88} M.~Tompa, H.~Woll. How to Share a Secret with Cheaters. \textit{J.\ Cryptology}, 1, 1988, 133--138.
+\end{thebibliography}
+
+\end{document}
