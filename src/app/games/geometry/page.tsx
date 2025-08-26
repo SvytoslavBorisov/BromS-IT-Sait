@@ -3,17 +3,14 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /**
- * Next.js Geometry‑Dash‑style Runner — /dash
- * 
- * Полностью автономный компонент (без внешних зависимостей):
- *  • Canvas‑рендер, параллакс‑звёзды, неоновая «земля», частицы
- *  • Авто‑скорость с нарастанием, вращающийся куб, монеты
- *  • Треугольные «шипы» и прямоугольные блоки
- *  • Коллизии, пауза (P), рестарт (R), мобильный тап‑контроль
- *  • Сохранение рекорда в localStorage
- *  • Адаптив под любые размеры, Retina‑скейлинг
+ * Next.js Geometry-Dash-style Runner — /dash
  *
- * Установка: положите файл как src/app/dash/page.tsx и откройте /dash
+ * Исправления:
+ *  • Коллизии со шпилями: «мягкая» проверка rect↔triangle без убийства по базовой линии, небольшой margin
+ *  • Единый якорь проекции viewX: считаем относительно X игрока (визуал = физика)
+ *  • Главный useEffect монтируется один раз; актуальные стейты читаем через .current
+ *  • Кнопки-оверлея больше не множат слушатели (once: true)
+ *  • Хитбокс игрока слегка ужат (прощает касания пиксель-в-пиксель)
  */
 
 // ---------- Вспомогательные типы ----------
@@ -27,25 +24,25 @@ interface Player {
   h: number;
   vy: number;
   onGround: boolean;
-  rotation: number; // для эффекта вращения в воздухе
+  rotation: number;
   color: string;
 }
 
 interface ObstacleBase {
   kind: "rect" | "spike";
-  x: number; // левый край в мировых координатах
-  w: number; // ширина
-  passed?: boolean; // для счета очков
+  x: number;
+  w: number;
+  passed?: boolean;
 }
 
 interface RectObstacle extends ObstacleBase {
   kind: "rect";
-  h: number; // высота прямоугольника
+  h: number;
 }
 
 interface SpikeObstacle extends ObstacleBase {
   kind: "spike";
-  h: number; // высота треугольника (апекс вверх)
+  h: number;
 }
 
 interface Coin {
@@ -53,7 +50,7 @@ interface Coin {
   y: number;
   r: number;
   taken?: boolean;
-  phase: number; // для анимации пульсации
+  phase: number;
 }
 
 interface Particle {
@@ -67,45 +64,114 @@ interface Particle {
 
 // ---------- Константы физики / оформления ----------
 
-const BASE_HEIGHT = 900; // Реф. высота для нормализации
-const G = 0.0022 * BASE_HEIGHT; // гравитация
-const JUMP_V = -0.045 * BASE_HEIGHT; // импульс прыжка
-const MAX_FALL = 0.06 * BASE_HEIGHT; // терминальная скорость
+const BASE_HEIGHT = 900;
+const G = 0.0022 * BASE_HEIGHT;
+const JUMP_V = -0.045 * BASE_HEIGHT;
+const MAX_FALL = 0.06 * BASE_HEIGHT;
 const PLAYER_SIZE = 0.045 * BASE_HEIGHT;
-const GROUND_RATIO = 0.78; // позиция поверхности земли: H * 0.78
-const GROUND_HEIGHT = 0.02 * BASE_HEIGHT; // толщина полосы земли (декор)
-const SPAWN_MIN = 700; // мин. расстояние между препятствиями (в px мировых)
-const SPAWN_MAX = 1200; // макс. расстояние между препятствиями
-const COIN_CHANCE = 0.6; // вероятность спавна монеты рядом с препятствием
-const STAR_COUNT = 120; // звезды параллакса
+const GROUND_RATIO = 0.78;
+const GROUND_HEIGHT = 0.02 * BASE_HEIGHT;
+const SPAWN_MIN = 700;
+const SPAWN_MAX = 1200;
+const COIN_CHANCE = 0.6;
+const STAR_COUNT = 120;
 
 // ---------- Утилиты ----------
 
 function clamp(v: number, a: number, b: number) {
   return Math.max(a, Math.min(b, v));
 }
-
 function rand(a: number, b: number) {
   return a + Math.random() * (b - a);
 }
-
 function nowMs() {
   return performance.now();
 }
-
 function easeOutCubic(t: number) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-// Проверка «точка в равнобедренном треугольнике апексом вверх»
-// Треугольник: основание [x, x+w] на уровне baseY, вершина (x+w/2, baseY - h)
-function pointInUpTriangle(px: number, py: number, x: number, w: number, baseY: number, h: number) {
-  if (px < x || px > x + w || py < baseY - h || py > baseY) return false;
-  const cx = x + w / 2;
+// Строгая проверка «точка в равнобедренном треугольнике (апекс вверх)»,
+// но без включения самой базовой линии (чтобы не «убивало» на самом основании).
+// Дополнительно можем слегка «сжать» треугольник marginX/marginY для френдли-геймплея.
+function pointInUpTriangleStrict(
+  px: number,
+  py: number,
+  x: number,
+  w: number,
+  baseY: number,
+  h: number,
+  marginY: number,
+  marginX: number
+) {
+  let x0 = x + marginX;
+  let w0 = w - 2 * marginX;
+  let baseY0 = baseY - marginY;
+  let h0 = h - marginY;
+  if (w0 <= 0 || h0 <= 0) return false;
+
+  if (px <= x0 || px >= x0 + w0) return false;
+  if (py <= baseY0 - h0 || py >= baseY0) return false; // NB: строго, база исключена
+
+  const cx = x0 + w0 / 2;
   const dx = Math.abs(px - cx);
-  const maxDy = (h * (w / 2 - dx)) / (w / 2);
-  const triY = baseY - maxDy;
-  return py >= triY; // ниже линии треугольника — столкновение
+  const maxDy = (h0 * (w0 / 2 - dx)) / (w0 / 2);
+  const triY = baseY0 - maxDy;
+  return py > triY; // строго внутри
+}
+
+// Линейная геометрия: пересечение отрезков (для страховки пересечений граней)
+function segIntersect(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number) {
+  const abx = bx - ax, aby = by - ay, acx = cx - ax, acy = cy - ay, adx = dx - ax, ady = dy - ay;
+  const cross1 = abx * acy - aby * acx;
+  const cross2 = abx * ady - aby * adx;
+  if ((cross1 > 0 && cross2 > 0) || (cross1 < 0 && cross2 < 0)) return false;
+  const cdx = dx - cx, cdy = dy - cy, cax = ax - cx, cay = ay - cy, cbx = bx - cx, cby = by - cy;
+  const cross3 = cdx * cay - cdy * cax;
+  const cross4 = cdx * cby - cdy * cbx;
+  if ((cross3 > 0 && cross4 > 0) || (cross3 < 0 && cross4 < 0)) return false;
+  return true;
+}
+
+// Проверка пересечения прямоугольника (rx,ry,rw,rh) и «шипа» (треугольника):
+// 1) любой угол прямоугольника строго внутри треугольника (без базы);
+// 2) апекс треугольника внутри прямоугольника;
+// 3) пересечение рёбер (игнорируем базу треугольника, чтобы не «убивало» по земле).
+function rectSpikeIntersect(
+  rx: number, ry: number, rw: number, rh: number,
+  x: number, baseY: number, w: number, h: number,
+  marginY: number, marginX: number
+) {
+  const corners: Vec2[] = [
+    { x: rx, y: ry },
+    { x: rx + rw, y: ry },
+    { x: rx, y: ry + rh },
+    { x: rx + rw, y: ry + rh },
+  ];
+  for (const c of corners) {
+    if (pointInUpTriangleStrict(c.x, c.y, x, w, baseY, h, marginY, marginX)) return true;
+  }
+  // апекс
+  const apexX = x + w / 2, apexY = baseY - h + marginY * 0.5;
+  if (apexX > rx && apexX < rx + rw && apexY > ry && apexY < ry + rh) return true;
+
+  // пересечение рёбер (только боковые грани треугольника)
+  const Lx1 = x + marginX, Ly1 = baseY - 0.0001; // чуть выше базы, чтобы не ловить «по земле»
+  const Lx2 = x + w / 2,   Ly2 = baseY - h + marginY;
+  const Rx1 = x + w - marginX, Ry1 = baseY - 0.0001;
+  const Rx2 = Lx2,            Ry2 = Ly2;
+
+  const edges: [number, number, number, number][] = [
+    [rx, ry, rx + rw, ry],             // top
+    [rx, ry + rh, rx + rw, ry + rh],   // bottom
+    [rx, ry, rx, ry + rh],             // left
+    [rx + rw, ry, rx + rw, ry + rh],   // right
+  ];
+  for (const [ex1, ey1, ex2, ey2] of edges) {
+    if (segIntersect(Lx1, Ly1, Lx2, Ly2, ex1, ey1, ex2, ey2)) return true;
+    if (segIntersect(Rx1, Ry1, Rx2, Ry2, ex1, ey1, ex2, ey2)) return true;
+  }
+  return false;
 }
 
 // AABB пересечение
@@ -117,39 +183,53 @@ function aabb(ax: number, ay: number, aw: number, ah: number, bx: number, by: nu
 
 export default function Page() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // UI-состояния (для HUD и оверлеев)
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [dead, setDead] = useState(false);
   const [score, setScore] = useState(0);
   const [coins, setCoins] = useState(0);
   const [high, setHigh] = useState(0);
-
-  // Для сигналов UI
   const [uiBlink, setUiBlink] = useState(0);
 
-  // Игровые рефы, чтобы не триггерить ререндеры
+  // Те же значения — как .current, чтобы игровой цикл (внутри единственного useEffect) видел актуальные данные
+  const startedRef = useRef(started);
+  const pausedRef = useRef(paused);
+  const deadRef = useRef(dead);
+  const scoreRef = useRef(score);
+  const coinsRefState = useRef(coins);
+  const highRef = useRef(high);
+  const uiBlinkRef = useRef(uiBlink);
+
+  useEffect(() => { startedRef.current = started; }, [started]);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => { deadRef.current = dead; }, [dead]);
+  useEffect(() => { scoreRef.current = score; }, [score]);
+  useEffect(() => { coinsRefState.current = coins; }, [coins]);
+  useEffect(() => { highRef.current = high; }, [high]);
+  useEffect(() => { uiBlinkRef.current = uiBlink; }, [uiBlink]);
+
+  // Игровые рефы (мир)
   const playerRef = useRef<Player | null>(null);
-  const worldXRef = useRef(0); // мировая прокрутка
-  const speedRef = useRef(0.34 * BASE_HEIGHT / 1000); // px/ms, начальная скорость
+  const worldXRef = useRef(0);
+  const speedRef = useRef(0.34 * BASE_HEIGHT / 1000);
   const baseSpeedRef = useRef(0.34 * BASE_HEIGHT / 1000);
   const lastMsRef = useRef(0);
   const groundYRef = useRef(0);
   const obstaclesRef = useRef<(RectObstacle | SpikeObstacle)[]>([]);
   const coinsRef = useRef<Coin[]>([]);
   const particlesRef = useRef<Particle[]>([]);
-  const nextSpawnAtRef = useRef(900); // мировой x, где появится след. преп.
-  const isPressedRef = useRef(false); // удержание кнопки (для мобилок)
-
+  const nextSpawnAtRef = useRef(900);
+  const isPressedRef = useRef(false);
   const starsRef = useRef<{ x: number; y: number; z: number }[]>([]);
   const rafRef = useRef<number | null>(null);
-
-  // ---------- Инициализация ----------
 
   useEffect(() => {
     const cvs = canvasRef.current!;
     const ctx = cvs.getContext("2d")!;
 
-    // Retina‑скейл + ресайз
+    // Retina-скейл + ресайз
     function resize() {
       const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
       const rect = cvs.getBoundingClientRect();
@@ -159,16 +239,14 @@ export default function Page() {
       cvs.height = Math.floor(h * DPR);
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       groundYRef.current = h * GROUND_RATIO;
-      // нормализация базовых констант под h
       baseSpeedRef.current = 0.34 * h / 1000;
-      if (!started) speedRef.current = baseSpeedRef.current;
+      if (!startedRef.current) speedRef.current = baseSpeedRef.current;
     }
-
     const ro = new ResizeObserver(resize);
     ro.observe(cvs);
     resize();
 
-    // Звезды параллакса
+    // Звезды
     if (starsRef.current.length === 0) {
       const rect = cvs.getBoundingClientRect();
       for (let i = 0; i < STAR_COUNT; i++) {
@@ -179,35 +257,26 @@ export default function Page() {
     // Игрок
     resetGame();
 
-    // Контролы
+    // --- Контролы ---
     function onDown(e: Event) {
       e.preventDefault();
       isPressedRef.current = true;
       tryJump();
     }
-    function onUp() {
-      isPressedRef.current = false;
-    }
-
+    function onUp() { isPressedRef.current = false; }
     function onKey(e: KeyboardEvent) {
       if (e.code === "Space" || e.code === "ArrowUp") {
         if (e.type === "keydown") {
-          e.preventDefault();
-          isPressedRef.current = true;
-          tryJump();
+          e.preventDefault(); isPressedRef.current = true; tryJump();
         } else if (e.type === "keyup") {
           isPressedRef.current = false;
         }
       }
       if (e.type === "keydown") {
-        if (e.code === "KeyP") {
-          togglePause();
-        } else if (e.code === "KeyR") {
-          restart();
-        }
+        if (e.code === "KeyP") togglePause();
+        else if (e.code === "KeyR") restart();
       }
     }
-
     window.addEventListener("pointerdown", onDown, { passive: false });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("keydown", onKey);
@@ -246,34 +315,34 @@ export default function Page() {
       obstaclesRef.current = [];
       coinsRef.current = [];
       particlesRef.current = [];
-      nextSpawnAtRef.current = rect.width * 1.0; // немного пустоты в начале
-      setScore(0);
-      setCoins(0);
-      setDead(false);
+      nextSpawnAtRef.current = rect.width * 1.0;
+      scoreRef.current = 0; setScore(0);
+      coinsRefState.current = 0; setCoins(0);
+      setDead(false); deadRef.current = false;
     }
 
     function togglePause() {
-      if (!started) return;
-      setPaused((p) => !p);
+      if (!startedRef.current) return;
+      setPaused(p => { const v = !p; pausedRef.current = v; return v; });
     }
 
     function restart() {
-      setStarted(true);
-      setPaused(false);
+      setStarted(true); startedRef.current = true;
+      setPaused(false); pausedRef.current = false;
       resetGame();
       speedRef.current = baseSpeedRef.current;
-      setUiBlink(1);
+      uiBlinkRef.current = 1; setUiBlink(1);
     }
 
     function tryJump() {
-      if (!started) {
-        setStarted(true);
-        setPaused(false);
+      if (!startedRef.current) {
+        setStarted(true); startedRef.current = true;
+        setPaused(false); pausedRef.current = false;
         resetGame();
-        setUiBlink(1);
+        uiBlinkRef.current = 1; setUiBlink(1);
         return;
       }
-      if (paused || dead) return;
+      if (pausedRef.current || deadRef.current) return;
       const p = playerRef.current!;
       if (p.onGround) {
         p.vy = (JUMP_V / BASE_HEIGHT) * cvs.getBoundingClientRect().height;
@@ -286,8 +355,7 @@ export default function Page() {
       const rect = cvs.getBoundingClientRect();
       for (let i = 0; i < n; i++) {
         particlesRef.current.push({
-          x,
-          y,
+          x, y,
           vx: rand(-0.6, 0.6) * rect.height / 600,
           vy: rand(-1.2, -0.4) * rect.height / 600,
           life: 1,
@@ -295,15 +363,13 @@ export default function Page() {
         });
       }
     }
-
     function spawnExplosion(x: number, y: number) {
       const rect = cvs.getBoundingClientRect();
       for (let i = 0; i < 42; i++) {
         const ang = rand(0, Math.PI * 2);
         const spd = rand(0.4, 1.8) * rect.height / 600;
         particlesRef.current.push({
-          x,
-          y,
+          x, y,
           vx: Math.cos(ang) * spd,
           vy: Math.sin(ang) * spd,
           life: 1,
@@ -317,13 +383,11 @@ export default function Page() {
       const H = rect.height;
       const gY = groundYRef.current;
 
-      // Случайный выбор преп.
       const isSpike = Math.random() < 0.55;
       if (isSpike) {
         const w = rand(50, 90) * (H / BASE_HEIGHT);
         const h = rand(60, 140) * (H / BASE_HEIGHT);
         obstaclesRef.current.push({ kind: "spike", x: atWorldX, w, h });
-        // монета
         if (Math.random() < COIN_CHANCE) {
           coinsRef.current.push({ x: atWorldX + w * 0.5, y: gY - h - rand(40, 80) * (H / BASE_HEIGHT), r: Math.max(9, 13 * (H / BASE_HEIGHT)), phase: Math.random() * Math.PI * 2 });
         }
@@ -335,8 +399,6 @@ export default function Page() {
           coinsRef.current.push({ x: atWorldX + w * 0.5, y: gY - h - rand(30, 60) * (H / BASE_HEIGHT), r: Math.max(9, 13 * (H / BASE_HEIGHT)), phase: Math.random() * Math.PI * 2 });
         }
       }
-
-      // Вероятность двойного преп. (комбо)
       if (Math.random() < 0.35) {
         const gap = rand(120, 220) * (H / BASE_HEIGHT);
         spawnSet(atWorldX + gap);
@@ -357,15 +419,12 @@ export default function Page() {
       let dt = t - lastMsRef.current;
       lastMsRef.current = t;
 
-      if (!started || paused) {
+      if (!startedRef.current || pausedRef.current) {
         draw(dt, true);
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
-
-      // Без рывков — ограничим dt
       dt = clamp(dt, 0, 32);
-
       update(dt);
       draw(dt, false);
       rafRef.current = requestAnimationFrame(tick);
@@ -376,20 +435,19 @@ export default function Page() {
       const H = rect.height;
       const p = playerRef.current!;
 
-      // Ускорение скорости по чуть‑чуть
+      // ускорение
       speedRef.current += (0.0000022 * H) * (dt / 16.67) / 1000;
 
-      const speed = speedRef.current * dt; // сдвиг мира
-      worldXRef.current += speed;
+      const worldShift = speedRef.current * dt;
+      worldXRef.current += worldShift;
 
-      // Спавн
       ensureSpawn(worldXRef.current);
 
-      // Физика игрока
+      // физика игрока
       p.vy += (G * (H / BASE_HEIGHT)) * (dt / 16.67);
       p.vy = clamp(p.vy, -Infinity, (MAX_FALL * (H / BASE_HEIGHT)));
       p.y += p.vy * (dt / 16.67);
-      // Земля
+
       const gY = groundYRef.current - p.h;
       if (p.y >= gY) {
         if (!p.onGround) spawnDust(p.x + p.w * 0.2, groundYRef.current, 14, 180);
@@ -400,71 +458,60 @@ export default function Page() {
         p.onGround = false;
       }
 
-      // Вращение, только в воздухе
       if (!p.onGround) p.rotation += 0.015 * dt;
       else p.rotation *= 0.7;
 
-      // Сдвиг препятствий/монет (мировой сдвиг — просто проверяем видимость по экрану)
       const leftX = worldXRef.current - rect.width * 0.2;
       const rightX = worldXRef.current + rect.width * 1.2;
 
-      // Коллизии
-      let died = false;
-      const viewX = (x: number) => x - worldXRef.current + rect.width * 0.22; // преобразование мировых X в экранные (с привязкой игрока)
+      // ВАЖНО: проекция мировых X на экран — относительно X игрока (визуал == физика)
+      const viewX = (x: number) => x - worldXRef.current + p.x;
 
       obstaclesRef.current = obstaclesRef.current.filter((o) => o.x + o.w > leftX - 200 && o.x < rightX + 200);
 
+      // Немного «мягче» хитбокс игрока
+      const pad = Math.min(p.w, p.h) * 0.12;
+      const px = p.x + pad, py = p.y + pad, pw = p.w - 2 * pad, ph = p.h - 2 * pad;
+
+      // Коллизии
+      let died = false;
+
       for (const o of obstaclesRef.current) {
-        // экранные координаты препятствий
         const ox = viewX(o.x);
         const oy = groundYRef.current;
-        const px = p.x;
-        const py = p.y;
 
         if (o.kind === "rect") {
           const ro = o as RectObstacle;
-          if (aabb(px, py, p.w, p.h, ox, oy - ro.h, ro.w, ro.h)) {
-            died = true;
-            break;
+          if (aabb(px, py, pw, ph, ox, oy - ro.h, ro.w, ro.h)) {
+            died = true; break;
           }
         } else {
           const so = o as SpikeObstacle;
-          // ББ для раннего выхода
-          if (aabb(px, py, p.w, p.h, ox, oy - so.h, so.w, so.h)) {
-            // Проверим четыре угла игрока
-            const corners: Vec2[] = [
-              { x: px, y: py + p.h },
-              { x: px + p.w, y: py + p.h },
-              { x: px, y: py },
-              { x: px + p.w, y: py },
-            ];
-            for (const c of corners) {
-              if (pointInUpTriangle(c.x, c.y, ox, so.w, oy, so.h)) {
-                died = true;
-                break;
-              }
+          // Быстрое бб-окно
+          if (aabb(px, py, pw, ph, ox, oy - so.h, so.w, so.h)) {
+            // «Дружественная» проверка треугольника без базы
+            const marginY = Math.max(2, H * 0.008);
+            const marginX = Math.max(1, so.w * 0.06);
+            if (rectSpikeIntersect(px, py, pw, ph, ox, oy, so.w, so.h, marginY, marginX)) {
+              died = true; break;
             }
-            if (died) break;
           }
         }
-        // очки за пройденные преп.
+        // очки
         if (!o.passed && viewX(o.x + o.w) < p.x) {
           o.passed = true;
-          setScore((s) => s + 1);
+          const ns = scoreRef.current + 1; scoreRef.current = ns; setScore(ns);
         }
       }
 
       // Монеты
-      for (const c of coinsRef.current) {
-        c.phase += 0.02 * dt;
-      }
+      for (const c of coinsRef.current) c.phase += 0.02 * dt;
       coinsRef.current = coinsRef.current.filter((c) => c.x > leftX - 100 && c.x < rightX + 100 && !c.taken);
       for (const c of coinsRef.current) {
-        const cx = viewX(c.x);
-        const cy = c.y;
-        if (aabb(p.x, p.y, p.w, p.h, cx - c.r, cy - c.r, 2 * c.r, 2 * c.r)) {
+        const cx = viewX(c.x), cy = c.y;
+        if (aabb(px, py, pw, ph, cx - c.r, cy - c.r, 2 * c.r, 2 * c.r)) {
           c.taken = true;
-          setCoins((k) => k + 1);
+          const nk = coinsRefState.current + 1; coinsRefState.current = nk; setCoins(nk);
           spawnDust(cx, cy, 12, 50);
         }
       }
@@ -478,31 +525,30 @@ export default function Page() {
       }
 
       if (died) {
-        setDead(true);
-        setPaused(false);
-        setStarted(true);
+        setDead(true); deadRef.current = true;
+        setPaused(false); pausedRef.current = false;
         // рекорд
         setHigh((h) => {
-          const nxt = Math.max(h, score);
+          const nxt = Math.max(h, scoreRef.current);
           try { localStorage.setItem("dash_highscore", String(nxt)); } catch {}
+          highRef.current = nxt;
           return nxt;
         });
         spawnExplosion(p.x + p.w / 2, p.y + p.h / 2);
       }
 
-      // Автопрыжок при удержании и касании земли (как в GD при зажатии)
-      if (isPressedRef.current && p.onGround) {
+      // автопрыжок при удержании
+      if (isPressedRef.current && p.onGround && !deadRef.current) {
         tryJump();
       }
     }
 
     function draw(dt: number, frozen: boolean) {
       const rect = cvs.getBoundingClientRect();
-      const W = rect.width;
-      const H = rect.height;
+      const W = rect.width, H = rect.height;
       const ctx = cvs.getContext("2d")!;
 
-      // Фон — вертикальный градиент неона
+      // фон
       const grad = ctx.createLinearGradient(0, 0, 0, H);
       grad.addColorStop(0, "#090915");
       grad.addColorStop(0.5, "#0b0b1c");
@@ -510,8 +556,7 @@ export default function Page() {
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, W, H);
 
-      // Параллакс звезды
-      const speed = speedRef.current * (frozen ? 0 : dt);
+      // звезды
       ctx.save();
       ctx.globalAlpha = 0.9;
       ctx.fillStyle = "white";
@@ -523,51 +568,50 @@ export default function Page() {
       }
       ctx.restore();
 
-      // Пол — неон: светящаяся линия + сетка
+      // земля
       const gY = groundYRef.current;
       drawNeonGround(ctx, W, H, gY);
 
-      // Препятствия и монеты
       const p = playerRef.current!;
-      const viewX = (x: number) => x - worldXRef.current + W * 0.22;
+      const viewX = (x: number) => x - worldXRef.current + p.x;
 
-      // Монеты (под слоем игрока, чтобы выглядело глубже)
+      // монеты
       for (const c of coinsRef.current) {
         const cx = viewX(c.x);
         const pul = (Math.sin(c.phase) * 0.3 + 0.7);
         drawCoin(ctx, cx, c.y, c.r * pul);
       }
 
-      // Препятствия
+      // препятствия
       for (const o of obstaclesRef.current) {
         const ox = viewX(o.x);
         if (o.kind === "rect") drawRectObstacle(ctx, ox, gY, o.w, (o as RectObstacle).h);
         else drawSpikeObstacle(ctx, ox, gY, o.w, (o as SpikeObstacle).h);
       }
 
-      // Игрок
+      // игрок
       drawPlayer(ctx, p);
 
-      // Частицы — сверху
+      // частицы
       for (const pt of particlesRef.current) drawParticle(ctx, pt);
 
       // HUD
       drawHUD(ctx, W, H);
 
-      // Оверлеи: старт / пауза / смерть
+      // Оверлеи
       drawOverlays(ctx, W, H);
 
-      // UI blink при рестарте
-      if (uiBlink > 0) {
-        const t = easeOutCubic(uiBlink);
+      // UI blink
+      if (uiBlinkRef.current > 0) {
+        const t = easeOutCubic(uiBlinkRef.current);
         ctx.fillStyle = `rgba(90,247,255,${t * 0.15})`;
         ctx.fillRect(0, 0, W, H);
-        setUiBlink(Math.max(0, uiBlink - 0.04 * (dt / 16.67)));
+        uiBlinkRef.current = Math.max(0, uiBlinkRef.current - 0.04 * (dt / 16.67));
+        setUiBlink(uiBlinkRef.current);
       }
     }
 
     function drawNeonGround(ctx: CanvasRenderingContext2D, W: number, H: number, gY: number) {
-      // Светящаяся линия земли
       ctx.save();
       ctx.shadowColor = "#34f1ff";
       ctx.shadowBlur = 24;
@@ -579,7 +623,6 @@ export default function Page() {
       ctx.stroke();
       ctx.restore();
 
-      // Тонкая сетка «неонового пола» ниже
       const gridTop = gY + 2;
       const gridBottom = Math.min(H, gY + (GROUND_HEIGHT / BASE_HEIGHT) * H + 160);
       ctx.save();
@@ -605,7 +648,6 @@ export default function Page() {
     function drawRectObstacle(ctx: CanvasRenderingContext2D, x: number, baseY: number, w: number, h: number) {
       const y = baseY - h;
       const r = 8;
-      // корпус
       ctx.save();
       const grad = ctx.createLinearGradient(x, y, x, y + h);
       grad.addColorStop(0, "#132f3a");
@@ -613,11 +655,9 @@ export default function Page() {
       ctx.fillStyle = grad;
       roundRect(ctx, x, y, w, h, r);
       ctx.fill();
-      // кайма
       ctx.strokeStyle = "#34f1ff";
       ctx.lineWidth = 2;
       ctx.stroke();
-      // блик
       ctx.globalAlpha = 0.2;
       ctx.fillStyle = "#5af7ff";
       roundRect(ctx, x + 4, y + 4, w - 8, 10, 6);
@@ -628,7 +668,6 @@ export default function Page() {
     function drawSpikeObstacle(ctx: CanvasRenderingContext2D, x: number, baseY: number, w: number, h: number) {
       const cx = x + w / 2;
       ctx.save();
-      // тень/свечение
       ctx.shadowColor = "#2ee7ff";
       ctx.shadowBlur = 18;
       ctx.fillStyle = "#0c2530";
@@ -638,12 +677,10 @@ export default function Page() {
       ctx.lineTo(cx, baseY - h);
       ctx.closePath();
       ctx.fill();
-      // контур
       ctx.shadowBlur = 0;
       ctx.strokeStyle = "#2ee7ff";
       ctx.lineWidth = 2;
       ctx.stroke();
-      // внутренний блик
       ctx.globalAlpha = 0.35;
       ctx.beginPath();
       ctx.moveTo(x + 6, baseY - 4);
@@ -667,7 +704,6 @@ export default function Page() {
       ctx.strokeStyle = "#ffeaa0";
       ctx.lineWidth = 2;
       ctx.stroke();
-      // глянец
       ctx.globalAlpha = 0.35;
       ctx.beginPath();
       ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.55, Math.PI * 1.1, Math.PI * 1.8);
@@ -679,39 +715,28 @@ export default function Page() {
 
     function drawPlayer(ctx: CanvasRenderingContext2D, p: Player) {
       ctx.save();
-      // свечение
       ctx.shadowColor = p.color;
       ctx.shadowBlur = 18;
-
-      // вращающийся куб
       ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
       ctx.rotate(p.rotation);
       ctx.translate(-p.w / 2, -p.h / 2);
-
-      // корпус
       const grad = ctx.createLinearGradient(0, 0, 0, p.h);
       grad.addColorStop(0, "#0d3940");
       grad.addColorStop(1, "#0b2930");
       ctx.fillStyle = grad;
       roundRect(ctx, 0, 0, p.w, p.h, 8);
       ctx.fill();
-
-      // кайма
       ctx.shadowBlur = 0;
       ctx.strokeStyle = p.color;
       ctx.lineWidth = 3;
       roundRect(ctx, 0, 0, p.w, p.h, 8);
       ctx.stroke();
-
-      // «глаза»
       ctx.fillStyle = "#5af7ff";
       ctx.globalAlpha = 0.9;
       ctx.beginPath();
       ctx.arc(p.w * 0.33, p.h * 0.42, p.w * 0.09, 0, Math.PI * 2);
       ctx.arc(p.w * 0.67, p.h * 0.42, p.w * 0.09, 0, Math.PI * 2);
       ctx.fill();
-
-      // рот
       ctx.globalAlpha = 0.7;
       ctx.beginPath();
       ctx.roundRect(p.w * 0.25, p.h * 0.62, p.w * 0.5, p.h * 0.16, 6);
@@ -731,14 +756,13 @@ export default function Page() {
     }
 
     function drawHUD(ctx: CanvasRenderingContext2D, W: number, H: number) {
-      // Рекорд из localStorage
-      if (!high) {
+      // подхват рекорда
+      if (!highRef.current) {
         try {
           const v = Number(localStorage.getItem("dash_highscore") || 0);
-          if (!isNaN(v) && v > 0) setHigh(v);
+          if (!isNaN(v) && v > 0) { highRef.current = v; setHigh(v); }
         } catch {}
       }
-
       ctx.save();
       ctx.font = "600 16px ui-sans-serif, system-ui, -apple-system, Segoe UI";
       ctx.fillStyle = "#c8f7ff";
@@ -746,12 +770,11 @@ export default function Page() {
       ctx.shadowBlur = 10;
       ctx.textAlign = "left";
       const pad = 16;
-      ctx.fillText(`SCORE: ${score}`, pad, 28);
-      ctx.fillText(`COINS: ${coins}`, pad, 50);
+      ctx.fillText(`SCORE: ${scoreRef.current}`, pad, 28);
+      ctx.fillText(`COINS: ${coinsRefState.current}`, pad, 50);
       ctx.textAlign = "right";
-      ctx.fillText(`BEST: ${Math.max(high, score)}`, W - pad, 28);
+      ctx.fillText(`BEST: ${Math.max(highRef.current, scoreRef.current)}`, W - pad, 28);
 
-      // Прогресс‑бар скорости ("сложность")
       const s = clamp(speedRef.current / (baseSpeedRef.current * 2.5), 0, 1);
       const barW = Math.min(280, W * 0.4);
       const x = (W - barW) / 2;
@@ -770,33 +793,33 @@ export default function Page() {
     }
 
     function drawOverlays(ctx: CanvasRenderingContext2D, W: number, H: number) {
+      if (startedRef.current && !pausedRef.current && !deadRef.current) return;
+
       ctx.save();
-      ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.25)";
       ctx.fillRect(0, 0, W, H);
-
-      // Подписи
       ctx.shadowColor = "#34f1ff";
       ctx.shadowBlur = 22;
       ctx.fillStyle = "#d9fbff";
+      ctx.textAlign = "center";
 
-      if (!started) {
+      if (!startedRef.current) {
         drawTitle(ctx, W, H, "NEON DASH");
         drawSub(ctx, W, H, "Space / ↑ / Click / Tap — Прыжок  |  P — Пауза  |  R — Рестарт");
         drawButton(ctx, W, H, "НАЧАТЬ", 0.62, () => {
-          setStarted(true);
-          setPaused(false);
+          setStarted(true); startedRef.current = true;
+          setPaused(false); pausedRef.current = false;
           resetGame();
-          setUiBlink(1);
+          uiBlinkRef.current = 1; setUiBlink(1);
         });
-      } else if (paused && !dead) {
+      } else if (pausedRef.current && !deadRef.current) {
         drawTitle(ctx, W, H, "ПАУЗА");
         drawSub(ctx, W, H, "Нажми P чтобы продолжить");
-      } else if (dead) {
+      } else if (deadRef.current) {
         drawTitle(ctx, W, H, "ПОРАЖЕНИЕ");
         drawSub(ctx, W, H, "R — рестарт  |  Esc — меню");
         drawButton(ctx, W, H, "ЕЩЁ РАЗ", 0.62, () => {
-          setDead(false);
+          setDead(false); deadRef.current = false;
           restart();
         });
       }
@@ -809,7 +832,6 @@ export default function Page() {
       ctx.fillText(text, W / 2, H * 0.36);
       ctx.restore();
     }
-
     function drawSub(ctx: CanvasRenderingContext2D, W: number, H: number, text: string) {
       ctx.save();
       ctx.globalAlpha = 0.9;
@@ -831,7 +853,6 @@ export default function Page() {
       const x = W / 2 - bw / 2;
       const y = H * yRatio - bh / 2;
 
-      // фон
       const grd = ctx.createLinearGradient(x, y, x + bw, y + bh);
       grd.addColorStop(0, "#32ffd2");
       grd.addColorStop(1, "#34f1ff");
@@ -839,7 +860,6 @@ export default function Page() {
       roundRect(ctx, x, y, bw, bh, 12);
       ctx.fill();
 
-      // текст
       ctx.save();
       ctx.fillStyle = "#071319";
       ctx.font = "800 20px ui-sans-serif, system-ui, -apple-system, Segoe UI";
@@ -848,19 +868,16 @@ export default function Page() {
       ctx.fillText(label, x + bw / 2, y + bh / 2);
       ctx.restore();
 
-      // hit‑box: регистрируем клики
-      // (Кликаем по всему канвасу и проверяем попадание)
-      // Простой разовый обработчик: слушаем только пока кнопка видна
       const listener = (ev: MouseEvent | PointerEvent) => {
         const r = canvasRef.current!.getBoundingClientRect();
         const px = (ev as PointerEvent).clientX - r.left;
         const py = (ev as PointerEvent).clientY - r.top;
         if (px >= x && px <= x + bw && py >= y && py <= y + bh) {
           onClick();
-          window.removeEventListener("pointerdown", listener);
         }
       };
-      window.addEventListener("pointerdown", listener);
+      // ВАЖНО: добавляем одноразовый слушатель
+      window.addEventListener("pointerdown", listener, { once: true });
     }
 
     function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -876,7 +893,8 @@ export default function Page() {
       ctx.quadraticCurveTo(x, y, x + r, y);
       ctx.closePath();
     }
-  }, [started, paused, dead, score, coins, high, uiBlink]);
+  // Монтируем ОДИН РАЗ
+  }, []);
 
   // ---------- Разметка ----------
   return (
@@ -886,7 +904,7 @@ export default function Page() {
           ref={canvasRef}
           style={{ width: "100%", height: "100%", display: "block", borderRadius: 18, boxShadow: "0 20px 80px rgba(52,241,255,.12), inset 0 0 0 1px rgba(52,241,255,.15)" }}
         />
-        {/* Верхняя панель управления — чисто декоративная */}
+        {/* Декор */}
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none", borderRadius: 18, boxShadow: "inset 0 0 80px rgba(52,241,255,.06)" }} />
         <div style={{ position: "absolute", top: 10, left: 10, right: 10, display: "flex", justifyContent: "space-between", gap: 8, pointerEvents: "none" }}>
           <Badge text="NEON DASH" />
