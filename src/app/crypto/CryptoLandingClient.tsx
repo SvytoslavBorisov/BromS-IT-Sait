@@ -8,6 +8,7 @@ import { Shield, Lock, KeyRound, ScrollText, Wrench, Globe, ArrowRight } from "l
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Gamepad2 } from "lucide-react";
 
 const features = [
   { icon: Shield, title: "Безопасность по умолчанию", text: "Проектируем сервисы с защитой данных и приватностью на первом месте." },
@@ -27,6 +28,13 @@ const publicTools = [
   { icon: ScrollText,title: "Проверка подписи",  text: "Проверить подпись файла/строки в браузере", link: "/crypto/random" },
   { icon: Globe,     title: "Случайность",       text: "Калькулятор энтропии и генератор случайных строк", link: "/crypto/random" },
 ];
+
+const gamesList = [
+  { title: "Geometry Dash Clone", desc: "Мини-аркада с прыжками через препятствия", link: "/games/geometry" },
+  { title: "Top-Down 2D", desc: "Вид сверху: движение, бой и выживание", link: "/games/platformer" },
+  { title: "Security Inspector", desc: "Симулятор инспектора на границе (Papers, Please style)", link: "/games/inspector" },
+];
+// ...
 
 /** Красивые пресеты кнопок под тёмный фон */
 const btn = {
@@ -180,6 +188,33 @@ export default function CryptoLandingClient() {
               <CardContent>
                 <Button asChild className={btn.linkPill} variant="ghost">
                   <Link href={t.link}>Открыть</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* GAMES */}
+      <section id="games" className="mx-auto max-w-6xl px-6 py-12 md:py-16">
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-white">Игры</h2>
+          <p className="text-sm text-white/70">Все игры доступны прямо в браузере.</p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          {gamesList.map((g, i) => (
+            <Card key={i} className="h-full bg-white/5 border-white/10">
+              <CardHeader className="space-y-3">
+                <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
+                  <Gamepad2 className="h-5 w-5 text-white" />
+                </div>
+                <CardTitle className="text-lg text-white">{g.title}</CardTitle>
+                <CardDescription className="text-sm leading-relaxed text-white/70">{g.desc}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild className={btn.linkPill} variant="ghost">
+                  <Link href={g.link}>Играть</Link>
                 </Button>
               </CardContent>
             </Card>

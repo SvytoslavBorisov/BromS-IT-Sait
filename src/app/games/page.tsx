@@ -1,139 +1,161 @@
 "use client";
-import { useState, useEffect } from "react";
-
-const MOVE_SPEED = 2;       // скорость врагов
-const COOLDOWN_TIME = 1000; // перезарядка башен
-const TOWER_RANGE = 50;     // радиус атаки в пикселях
-
-interface Enemy { x: number; y: number; hp: number; }
-interface Tower { x: number; y: number; level: number; hp: number; cooldown: number; }
+import { useMemo, useEffect } from "react";
+import { useScreenSize } from "@/components/games/TowerDefense/hooks/useScreenSize";
+import { useGameStore } from "@/components/games/TowerDefense/store";
+import { useWaveSpawner } from "@/components/games/TowerDefense/hooks/useWaveSpawner";
+import { useGameLoop } from "@/components/games/TowerDefense/hooks/useGameLoop";
+import { BASE_RADIUS, BULLET_RADIUS, ENEMY_RADIUS, TOWER_COST } from "@/components/games/TowerDefense/config";
+import { GameHUD } from "@/components/games/TowerDefense/GameHUD";
+import { ShopPanel } from "@/components/games/TowerDefense/ShopPanel";
+import { useWaveAutoStart } from "@/components/games/TowerDefense/hooks/useWaveAutoStart";
 
 export default function Page() {
-  const [enemies, setEnemies] = useState<Enemy[]>([]);
-  const [towers, setTowers] = useState<Tower[]>([]);
-  const [lives, setLives] = useState(10);
-  const [gold, setGold] = useState(100);
-  const [screenSize, setScreenSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const screen = useScreenSize();
 
-  const center = { x: screenSize.width / 2, y: screenSize.height / 2 };
+  const setCenter = useGameStore(s => s.setCenter);
+  const enemies = useGameStore(s => s.enemies);
+  const towers = useGameStore(s => s.towers);
+  const bullets = useGameStore(s => s.bullets);
+  const selectTower = useGameStore(s => s.selectTower);
+  const placeTower = useGameStore(s => s.placeTower);
+  const towerRange = useGameStore(s => s.towerRange);
+  const selectedId = useGameStore(s => s.selectedTowerId);
 
-  // ===== Обновление размеров экрана =====
+  const center = useMemo(() => ({ x: screen.width / 2, y: screen.height / 2 }), [screen]);
+
+  // ✅ корректно: обновляем стор ТОЛЬКО в эффекте, не в рендере
   useEffect(() => {
-    const handleResize = () => setScreenSize({ width: window.innerWidth, height: window.innerHeight });
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+    setCenter(center);
+  }, [center, setCenter]);
 
-  // ===== Спавн врагов =====
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const side = Math.floor(Math.random() * 4);
-      let x = 0, y = 0;
-      if (side === 0) { x = 0; y = Math.random() * screenSize.height; }
-      else if (side === 1) { x = screenSize.width; y = Math.random() * screenSize.height; }
-      else if (side === 2) { x = Math.random() * screenSize.width; y = 0; }
-      else { x = Math.random() * screenSize.width; y = screenSize.height; }
-      setEnemies(prev => [...prev, { x, y, hp: 3 }]);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [screenSize]);
+  // ❌ УДАЛИТЬ: это и вызывает "Cannot update a component while rendering"
+  // setCenter(center);
 
-  // ===== Главный игровой тик =====
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setEnemies(prevEnemies => {
-        let newEnemies = prevEnemies.map(e => ({ ...e }));
-        let newTowers = towers.map(t => ({ ...t }));
+  // запуск систем (хуки сами используют useEffect внутри)
+  useWaveSpawner(screen);
+  useGameLoop();
+  useWaveAutoStart();
 
-        // движение врагов
-        newEnemies = newEnemies.map(e => {
-          const dx = center.x - e.x;
-          const dy = center.y - e.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist < 5) { setLives(l => l-1); return null; } // дошел до базы
-          return { ...e, x: e.x + (dx/dist)*MOVE_SPEED, y: e.y + (dy/dist)*MOVE_SPEED };
-        }).filter((e): e is Enemy => e !== null);
-
-        // башни атакуют
-        newTowers = newTowers.map(t => {
-          t.cooldown = Math.max(0, t.cooldown - 300);
-          const target = t.cooldown <= 0 ? newEnemies.find(e => {
-            const dx = e.x - t.x;
-            const dy = e.y - t.y;
-            return Math.sqrt(dx*dx + dy*dy) <= TOWER_RANGE;
-          }) : undefined;
-          if(target) { target.hp -= 1; t.cooldown = COOLDOWN_TIME; }
-          return t;
-        });
-
-        const deadEnemies = newEnemies.filter(e => e.hp <= 0).length;
-        if(deadEnemies>0) setGold(g => g + deadEnemies*2);
-        newEnemies = newEnemies.filter(e => e.hp > 0);
-
-        setTowers(newTowers);
-        return newEnemies;
-      });
-    }, 50);
-    return () => clearInterval(interval);
-  }, [towers, center]);
-
-  function placeTower(x: number, y: number) {
-    if (gold < 10) return;
-    setTowers(prev => [...prev, { x, y, level: 1, hp: 5, cooldown: 0 }]);
-    setGold(g => g - 10);
-  }
+  const ready = screen.width > 0 && screen.height > 0;
+  if (!ready) return <div style={{ height: "100vh" }} suppressHydrationWarning />;
 
   return (
-    <div style={{ width:'100vw', height:'100vh', position:'relative', overflow:'hidden', background:'#eee' }}>
-      <h1 style={{ position:'absolute', top:10, left:10, fontSize:18 }}>Crypto Tower Defense</h1>
-      <p style={{ position:'absolute', top:30, left:10 }}>💖 Lives: {lives} | 🪙 Gold: {gold}</p>
+    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden", background: "#0b0f17" }}>
+      <div style={{position:"absolute", inset:0, pointerEvents:"none", zIndex:20}}>
+        <div style={{pointerEvents:"auto"}}><GameHUD /></div>
+        <div style={{pointerEvents:"auto"}}><ShopPanel /></div>
+      </div>
+      {/* БАЗА */}
+      <div
+        style={{
+          position: "absolute",
+          width: BASE_RADIUS * 2,
+          height: BASE_RADIUS * 2,
+          background: "linear-gradient(135deg, #13ce66, #0ea5e9)",
+          borderRadius: "50%",
+          boxShadow: "0 0 18px rgba(14,165,233,.35), inset 0 0 12px rgba(255,255,255,.25)",
+          transform: "translate(-50%, -50%)",
+          left: center.x,
+          top: center.y,
+          display: "grid",
+          placeItems: "center",
+          color: "#012",
+          fontWeight: 800,
+          fontSize: 10,
+          letterSpacing: 1,
+        }}
+      >
+        BASE
+      </div>
 
-      {/* центр базы */}
-      <div style={{
-        position:'absolute',
-        width:40,
-        height:40,
-        background:'green',
-        borderRadius:'50%',
-        transform:'translate(-50%,-50%)',
-        left:center.x,
-        top:center.y
-      }}>BASE</div>
-
-      {/* враги */}
-      {enemies.map((e,i)=>(
-        <div key={i} style={{
-          position:'absolute',
-          width:20,
-          height:20,
-          background:'red',
-          borderRadius:'50%',
-          left:e.x-10,
-          top:e.y-10,
-        }}></div>
+      {/* ВРАГИ */}
+      {enemies.map(e => (
+        <div
+          key={e.id}
+          style={{
+            position: "absolute",
+            width: ENEMY_RADIUS * 2,
+            height: ENEMY_RADIUS * 2,
+            left: e.x - ENEMY_RADIUS,
+            top: e.y - ENEMY_RADIUS,
+            borderRadius: "50%",
+            background: "radial-gradient(circle at 30% 30%, #ff9aa2, #ff3b3b)",
+            boxShadow: "0 0 10px rgba(255,60,60,.55)",
+            border: "1px solid rgba(255,255,255,.15)",
+          }}
+          title={`HP: ${e.hp}`}
+        />
       ))}
 
-      {/* башни */}
-      {towers.map((t,i)=>(
-        <div key={i} style={{
-          position:'absolute',
-          width:30,
-          height:30,
-          background: t.cooldown>0 ? 'orange' : 'blue',
-          borderRadius:'50%',
-          left:t.x-15,
-          top:t.y-15,
-          cursor:'pointer'
-        }} onClick={()=>{ /* апгрейд можно добавить */ }}></div>
+      {/* БАШНИ */}
+      {towers.map(t => {
+        const selected = t.id === selectedId;
+        return (
+          <div
+            key={t.id}
+            onMouseDown={(e) => e.stopPropagation()} // гасим раньше
+            onClick={(e) => { e.stopPropagation(); selectTower(t.id); }}
+            style={{
+              position: "absolute",
+              width: 30,
+              height: 30,
+              left: t.x - 15,
+              top: t.y - 15,
+              zIndex: 1,
+              borderRadius: 10,
+              background: t.cooldownMs > 0 ? "linear-gradient(180deg, #2563eb, #1d4ed8)" : "linear-gradient(180deg, #4f46e5, #6366f1)",
+              border: selected ? "2px solid #fbbf24" : "1px solid rgba(255,255,255,.15)",
+              boxShadow: selected ? "0 0 20px rgba(251,191,36,.6)" : "0 6px 20px rgba(99,102,241,.25), inset 0 -3px 8px rgba(255,255,255,.12)",
+              cursor: "pointer",
+            }}
+            title={`Радиус: ${Math.round(towerRange(t))}`}
+          >
+            {selected && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: 15 - towerRange(t),
+                  top: 15 - towerRange(t),
+                  width: towerRange(t) * 2,
+                  height: towerRange(t) * 2,
+                  borderRadius: "50%",
+                  border: "1px dashed rgba(255,255,255,.2)",
+                  pointerEvents: "none",
+                }}
+              />
+            )}
+          </div>
+        );
+      })}
+
+      {/* ПУЛИ */}
+      {bullets.map(b => (
+        <div
+          key={b.id}
+          style={{
+            position: "absolute",
+            width: BULLET_RADIUS * 2,
+            height: BULLET_RADIUS * 2,
+            left: b.x - BULLET_RADIUS,
+            top: b.y - BULLET_RADIUS,
+            borderRadius: "50%",
+            background: "radial-gradient(circle at 35% 35%, #fff, #ffd166)",
+            boxShadow: "0 0 8px rgba(255,209,102,.8)",
+          }}
+        />
       ))}
 
-      {/* клик для установки башни */}
-      <div style={{ position:'absolute', width:'100%', height:'100%' }} onClick={e=>{
-        const rect = (e.target as HTMLDivElement).getBoundingClientRect();
-        const x = e.clientX;
-        const y = e.clientY;
-        placeTower(x,y);
-      }}></div>
+      {/* Клик по полю — постановка башни */}
+      <div
+        style={{ position: "absolute", inset: 0, cursor: "crosshair", zIndex: 0 }}
+        onClick={(e) => {
+          const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          useGameStore.getState().placeTower(x, y);
+        }}
+        title={`Кликните для установки (стоимость ${TOWER_COST})`}
+      />
     </div>
   );
 }
