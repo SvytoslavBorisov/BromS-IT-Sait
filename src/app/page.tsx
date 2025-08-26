@@ -1,26 +1,12 @@
-import fs from "fs/promises";
-import path from "path";
-import styles from "./page.module.css";
-export const dynamic = "force-dynamic";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import HeroSection from "@/components/HeroSection";
-import AboutSection from "@/components/AboutSection";
-import ProjectsSection from "@/components/ProjectSection";
+"use client";
 
-import ContactSection from "@/components/ContactSection";
+import React from "react";
+import BookFlip from "./crypto/BookFlip"; // компонент с переворотом страницы
 
-
-export default async function MainPage() {
-
+export default function Page() {
   return (
-    <div className={styles.wrapper}>
-        <Header />
-        <HeroSection />
-        <AboutSection />
-        <ProjectsSection />
-        <ContactSection />
-        <Footer />
+    <div>
+      <BookFlip />
     </div>
   );
 }
