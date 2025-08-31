@@ -17,7 +17,7 @@ export default function Header() {
   ];
 
   return (
-    <header className="absolute md:static top-0 left-0 w-full bg-white shadow-sm z-10">
+    <header className="absolute md:static top-0 left-0 w-full bg-white shadow-sm z-10 text-black">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
         {/* Desktop menu */}
         <nav className="hidden md:flex flex-1">
