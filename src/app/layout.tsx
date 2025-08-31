@@ -166,8 +166,6 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         {/* Глобальный провайдер (тема/стор/локаль и т.д.) */}
         <Providers>
           <div className="font-sans">
-            {/* Лёгкий визуальный «бар» сверху — тонкая линия-акцент бренда */}
-            <div className="h-[3px] w-full bg-gradient-to-r from-primary/90 via-fuchsia-500/70 to-cyan-400/70" />
             <main>{children}</main>
           </div>
         </Providers>
