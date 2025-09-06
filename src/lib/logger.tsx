@@ -221,3 +221,4 @@ export async function shutdownLogger() {
   await getLogger().flushAndClose();
 }
 
+export { log as logger };
