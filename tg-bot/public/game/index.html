@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BromSIT Mini App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    html,body { margin:0; padding:0; font-family: system-ui, sans-serif; }
+    .wrap { min-height: 100dvh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+    .card { padding:20px; border-radius:16px; box-shadow: 0 8px 24px rgba(0,0,0,.07); background: var(--bg, #fff); width:min(480px, 90vw); }
+    .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
+    button { padding:12px 16px; border:0; border-radius:12px; cursor:pointer; font-size:16px; }
+    .btn { background:#0ea5e9; color:#fff; }
+    .muted { opacity:.75; font-size:14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2>🎮 BromSIT Mini App</h2>
+      <p>Это простейший пример мини-приложения внутри Telegram WebView.</p>
+
+      <div class="row">
+        <span>Очки:</span>
+        <strong id="score">0</strong>
+      </div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="plus" class="btn">+1 очко</button>
+        <button id="save" class="btn">Сохранить</button>
+      </div>
+
+      <p class="muted" style="margin-top:12px;">Откроется через кнопку в боте: <code>/play</code></p>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();                 // сделать WebView максимальным
+    tg.ready();
+    // Тема
+    document.documentElement.style.setProperty('--bg', tg.themeParams.bg_color || '#fff');
+
+    let score = 0;
+    const elScore = document.getElementById('score');
+    const elPlus  = document.getElementById('plus');
+    const elSave  = document.getElementById('save');
+
+    elPlus.addEventListener('click', () => {
+      score++;
+      elScore.textContent = String(score);
+      tg.HapticFeedback.impactOccurred('light');
+    });
+
+    // Показать главную кнопку Telegram (альтернативно)
+    tg.MainButton.setText('💾 Сохранить очки');
+    tg.MainButton.onClick(saveScore);
+    tg.MainButton.show();
+
+    elSave.addEventListener('click', saveScore);
+
+    async function saveScore() {
+      try {
+        // Можно отправить данные обратно в бот через sendData (бот поймает web_app_data)
+        // tg.sendData(JSON.stringify({ score }));
+
+        // Или постом на свой API (удобно для серверного сохранения)
+        const resp = await fetch('/api/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            score,
+            // initData можно валидировать на бэкенде (см. TODO в index.js)
+            initData: tg.initData || ''
+          })
+        });
+        const json = await resp.json();
+        tg.showPopup({ title: 'Готово', message: 'Очки сохранены ✅' });
+      } catch (e) {
+        tg.showPopup({ title: 'Ошибка', message: String(e) });
+      }
+    }
+  </script>
+</body>
+</html>
