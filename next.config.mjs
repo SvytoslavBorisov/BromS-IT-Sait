@@ -1,5 +1,3 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  telemetry: false,          // <- ключевая строчка
-};
+const nextConfig = {};
 export default nextConfig;
