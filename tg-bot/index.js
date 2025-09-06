@@ -55,13 +55,21 @@ bot.on('text', (ctx) => ctx.reply(`Эхо: ${ctx.message.text}`));
 
 // --------------- APP (Express) ---------------
 const app = express();
-app.set('trust proxy', true);
+app.set('trust proxy', 'loopback');
 app.use(morgan('combined'));
 app.use(compression());
 app.use(express.json({ limit: '2mb' }));
 
 // Раздаём мини-апп как статику: https://<домен>/game/
-app.use('/game', express.static(path.join(__dirname, 'public', 'game')));
+app.use('/game', express.static(
+  path.join(__dirname, 'public', 'game'),
+  { index: 'index.html', extensions: ['html'] }
+));
+
+// ЯВНО отдать index.html и для /game без слэша
+app.get(['/game', '/game/'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'game', 'index.html'));
+});
 
 // Health/ping
 app.get('/health', (_, res) => res.send('ok'));
