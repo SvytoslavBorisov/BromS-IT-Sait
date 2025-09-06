@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { poppins, geistSans, geistMono } from "./fonts";
 import { YaMetrika } from "./_analytics/YaMetrika";
 import Script from "next/script";
-
+import '../_build-guard';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'default-no-store';
