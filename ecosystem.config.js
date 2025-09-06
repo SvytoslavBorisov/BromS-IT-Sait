@@ -1,15 +1,11 @@
 module.exports = {
   apps: [
     {
-      name: "realtime",
-      script: "npx",
-      args: "realtime/server.ts",
-      cwd: "/var/www/bromsit/BromS-IT-Sait",
+      name: "tg-bot",
+      cwd: "./tg-bot",
+      script: "index.js",
       env: {
-        NODE_ENV: "production",
-        SOCKETS_PORT: "4000",
-        SOCKETS_JWT_SECRET: "superlongrandomsecret_here",
-        SOCKETS_CORS_ORIGINS: "https://broms-it.ru,http://localhost:3000"
+        NODE_ENV: "production"
       }
     }
   ]
