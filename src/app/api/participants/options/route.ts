@@ -1,8 +1,6 @@
 // src/app/api/org/options/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/org/options?companyId=...&departmentId=...

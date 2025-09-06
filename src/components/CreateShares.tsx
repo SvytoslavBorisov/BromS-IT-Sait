@@ -6,7 +6,6 @@ import { createCustomShares, createAsymmetricShares, FileType, Participant } fro
 import ParticipantsList from "@/components/profile/ParticipantsList";
 import { Card, CardHeader, CardContent } from "@/components/ui/cards";
 import { Button } from "@/components/ui/button";
-import { Session } from "inspector/promises";
 import { useSession } from "next-auth/react";
 import { clientLog } from "@/lib/client-log";
 
