@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { poppins, geistSans, geistMono } from "./fonts";
 import { YaMetrika } from "./_analytics/YaMetrika";
 import Script from "next/script";
-import '../_build-guard';
+import './_build-guard';
 export const dynamic = "force-dynamic"; // отключаем SSG глобально
 export const revalidate = 0;
 
