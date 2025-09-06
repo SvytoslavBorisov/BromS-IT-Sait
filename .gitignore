@@ -39,6 +39,7 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+/logs
 
 package.json
 package-lock.json
