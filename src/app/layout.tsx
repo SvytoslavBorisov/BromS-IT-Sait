@@ -7,6 +7,10 @@ import { poppins, geistSans, geistMono } from "./fonts";
 import { YaMetrika } from "./_analytics/YaMetrika";
 import Script from "next/script";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'default-no-store';
+
 const SITE_NAME = "Broms IT";
 const SITE_TITLE = "Broms IT — безопасные решения и криптография";
 const SITE_DESCRIPTION =
