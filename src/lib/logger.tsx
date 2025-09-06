@@ -220,3 +220,4 @@ export function ensureRequestId(existing?: string | null): string {
 export async function shutdownLogger() {
   await getLogger().flushAndClose();
 }
+
