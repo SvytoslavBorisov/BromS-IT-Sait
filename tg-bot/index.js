@@ -8,7 +8,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Telegraf, Markup } from 'telegraf';
-
+import { verifyInitData, parseInitData } from './verifyInitData.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -99,16 +99,28 @@ app.post(WEBHOOK_PATH, webhookLimiter, checkWebhookSecret, (req, res) => {
   bot.handleUpdate(req.body, res);
 });
 
-// API из мини-аппа: сохраняем прогресс (пример)
 app.post('/api/progress', async (req, res) => {
-  // TODO: здесь по-хорошему валидировать req.body.initData (подпись Telegram WebApp)
-  // СХЕМА ПРИМЕРА:
-  // { score: number, initData: string }
-  const { score = 0 } = req.body || {};
-  console.log('progress:', { score, from: req.ip });
-  // Сохранение в БД пропущено — просто отвечаем
-  return res.json({ ok: true });
+  try {
+    // initData передаём из web-app в заголовке
+    const initData = req.header('X-Telegram-Init-Data') || '';
+    if (!verifyInitData(initData, BOT_TOKEN)) {
+      return res.status(401).json({ ok: false, error: 'invalid initData' });
+    }
+
+    const { score = 0 } = req.body || {};
+    const init = parseInitData(initData);
+    const uid = init?.user?.id;
+    const uname = init?.user?.username || init?.user?.first_name;
+
+    // Тут сохрани в БД по uid; для примера просто лог:
+    console.log('progress', { uid, uname, score, at: new Date().toISOString() });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('progress error:', e);
+    return res.status(500).json({ ok: false, error: 'internal' });
+  }
 });
+
 
 // Быстрый API-пинг из мини-аппа
 app.get('/api/ping', (_, res) => res.json({ ok: true, ts: Date.now() }));
