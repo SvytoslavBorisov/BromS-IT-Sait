@@ -1,14 +1,26 @@
 "use client";
 
 import { useMemo } from "react";
-import { CreateSharesFormState } from "..";
 import { binom, secretStrength } from "../utils";
 
-export default function useFormValidation(state: CreateSharesFormState) {
-  const n = state.selected.size || 0;
-  const k = Math.min(Math.max(state.threshold || 1, 1), Math.max(n, 1));
+// УЗКИЙ тип вместо импорта из ".." — разрывает цикл
+type CreateSharesFormStateLite = {
+  title?: string;
+  secret?: string;
+  type: string;                 // например: "CUSTOM" | "RANDOM" | ...
+  threshold?: number;
+  selected: Set<string>;
+};
+
+export default function useFormValidation(state: CreateSharesFormStateLite) {
+  const n = state.selected?.size ?? 0;
+  const k = Math.min(Math.max(state.threshold ?? 1, 1), Math.max(n, 1));
+
   const combos = useMemo(() => binom(n, k), [n, k]);
-  const strength = useMemo(() => secretStrength(state.secret), [state.secret]);
+  const strength = useMemo(
+    () => secretStrength(state.secret ?? ""),
+    [state.secret]
+  );
 
   const errors = {
     title: !state.title?.trim() ? "Укажите название" : "",
@@ -25,7 +37,9 @@ export default function useFormValidation(state: CreateSharesFormState) {
   };
 
   const isValid =
-    !errors.title && !errors.secret && !errors.threshold &&
+    !errors.title &&
+    !errors.secret &&
+    !errors.threshold &&
     (state.type !== "CUSTOM" || !!state.secret);
 
   return { errors, isValid, n, k, combos, strength };
