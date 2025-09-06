@@ -1,20 +1,14 @@
 // src/lib/logger.ts
-import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from "fs";
+// ВАЖНО: никакого fs на верхнем уровне — только ленивое создание потока на сервере.
 import path from "path";
 import { randomUUID } from "crypto";
 import util from "util";
 
-/* ===== Конфиг через env (разумные дефолты) ===== */
-const LOG_DIR  = process.env.LOG_DIR  || path.join(process.cwd(), "logs");
-const LOG_BASE = (process.env.LOG_FILE && process.env.LOG_FILE.replace(/\.log$/i,"")) || "app"; // без .log
-const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase() as LogLevel; // debug|info|warn|error
-const ROTATE_DAILY = (process.env.LOG_ROTATE_DAILY || "true") === "true";
-const MAX_BYTES = parseInt(process.env.LOG_MAX_BYTES || "", 10) || 10 * 1024 * 1024; // 10MB
-
-/* ===== Типы ===== */
 export type LogLevel = "debug" | "info" | "warn" | "error";
 type LevelRank = Record<LogLevel, number>;
 const LEVEL_RANK: LevelRank = { debug: 10, info: 20, warn: 30, error: 40 };
+
+type AnyRecord = Record<string, any>;
 
 type BaseFields = {
   timestamp: string;
@@ -24,264 +18,205 @@ type BaseFields = {
   module?: string;
 };
 
-type AuthLoginEvent = {
-  event: "auth.login";
-  userId?: string;             // если известен (успешный логин или найден в БД)
-  login?: string;              // введённый логин/емейл (без пароля)
-  ip?: string;
-  ua?: string;                 // user-agent
-  method: "password" | "oauth" | "magic-link" | "sso";
-  outcome: "success" | "failure";
-  reason?: "bad_credentials" | "locked" | "2fa_required" | "2fa_failed" | "internal_error";
-  requestId?: string;
-  sessionId?: string;          // выданная сессия/токен (идентификатор, не сам токен)
-  latencyMs?: number;
+// ── env/настройки (без побочек) ────────────────────────────────────────────────
+const LOG_DIR  = process.env.LOG_DIR  || path.join(process.cwd(), "logs");
+const LOG_BASE = (process.env.LOG_FILE && process.env.LOG_FILE.replace(/\.log$/i,"")) || "app";
+const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase() as LogLevel;
+const ROTATE_DAILY = (process.env.LOG_ROTATE_DAILY || "true") === "true";
+const MAX_BYTES = parseInt(process.env.LOG_MAX_BYTES || "", 10) || 10 * 1024 * 1024;
+
+// ── утилиты без fs ─────────────────────────────────────────────────────────────
+const COLORS: Record<LogLevel, string> = {
+  debug: "\x1b[37m", info: "\x1b[36m", warn: "\x1b[33m", error: "\x1b[31m",
 };
+const RESET = "\x1b[0m";
+const dayStamp = (d = new Date()) => d.toISOString().slice(0, 10);
 
-type AnyRecord = Record<string, any>;
-
-/* ===== Утилиты ===== */
-
-/** ISO‑дата (только день) для ротации */
-function dayStamp(d = new Date()): string {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
-}
-
-/** Маскировка чувствительных полей (поверхностно и слегка рекурсивно для простых объектов) */
 const SENSITIVE_KEYS = new Set([
   "password","pass","pwd","token","accessToken","refreshToken","secret","apiKey","authorization","cookie","set-cookie"
 ]);
 function maskSensitive(obj: any, depth = 0): any {
-  if (obj == null) return obj;
-  if (depth > 2) return obj; // ограничим глубину чтобы не тратить CPU
-  if (typeof obj === "string") return obj;
-  if (typeof obj === "number" || typeof obj === "boolean" || typeof obj === "bigint") return obj;
+  if (obj == null || depth > 2) return obj;
+  if (typeof obj === "string" || typeof obj === "number" || typeof obj === "boolean" || typeof obj === "bigint") return obj;
   if (obj instanceof Date) return obj.toISOString();
-  if (Buffer.isBuffer(obj)) return `<Buffer len=${obj.length}>`;
   if (Array.isArray(obj)) return obj.map(v => maskSensitive(v, depth + 1));
-
   if (obj instanceof Error) {
-    return {
-      name: obj.name,
-      message: obj.message,
-      stack: obj.stack,
-      ...("code" in obj ? { code: (obj as any).code } : {}),
-    };
+    return { name: obj.name, message: obj.message, stack: obj.stack, ...( "code" in obj ? { code: (obj as any).code } : {} ) };
   }
-
   if (typeof obj === "object") {
     const out: AnyRecord = {};
-    for (const [k, v] of Object.entries(obj)) {
-      if (SENSITIVE_KEYS.has(k)) {
-        out[k] = "***";
-      } else {
-        out[k] = maskSensitive(v, depth + 1);
-      }
-    }
+    for (const [k, v] of Object.entries(obj)) out[k] = SENSITIVE_KEYS.has(k) ? "***" : maskSensitive(v, depth + 1);
     return out;
   }
   return obj;
 }
-
-/** Безопасный JSON.stringify: bigint→string, циклы игнорим, Error обрабатываем */
 function safeStringify(input: any): string {
   const seen = new WeakSet();
-  return JSON.stringify(
-    input,
-    (key, value) => {
-      if (typeof value === "bigint") return value.toString();
-      if (value instanceof Error) {
-        return {
-          name: value.name,
-          message: value.message,
-          stack: value.stack,
-          ...("code" in value ? { code: (value as any).code } : {}),
-        };
-      }
-      if (typeof value === "object" && value !== null) {
-        if (seen.has(value)) return "[Circular]";
-        seen.add(value);
-      }
-      return value;
-    }
-  );
+  return JSON.stringify(input, (key, value) => {
+    if (typeof value === "bigint") return value.toString();
+    if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack, ...( "code" in value ? { code: (value as any).code } : {} ) };
+    if (typeof value === "object" && value !== null) { if (seen.has(value)) return "[Circular]"; seen.add(value); }
+    return value;
+  });
 }
 
-/** Цветной вывод в dev без внешних пакетов */
-const COLORS: Record<LogLevel, string> = {
-  debug: "\x1b[37m", // gray
-  info:  "\x1b[36m", // cyan
-  warn:  "\x1b[33m", // yellow
-  error: "\x1b[31m", // red
+// ── детектор фаз, где НЕЛЬЗЯ трогать fs ───────────────────────────────────────
+const isClient = typeof window !== "undefined";
+const isBuildPhase =
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  !!(process as any).env?.__NEXT_PRIVATE_BUILD_WORKER; // внутренний флаг build-воркера
+
+// ── интерфейс логгера + noop для клиента/билда ────────────────────────────────
+export interface Logger {
+  write(level: LogLevel, msg: string, meta?: unknown): void;
+  debug(msg: AnyRecord, meta?: unknown): void;
+  info(msg: AnyRecord, meta?: unknown): void;
+  warn(msg: AnyRecord, meta?: unknown): void;
+  error(msg: AnyRecord, meta?: unknown): void;
+  logError(err: unknown, extra?: AnyRecord): void;
+  flushAndClose(): Promise<void>;
+  setLevel(level: LogLevel): void;
+  child(ctx: Partial<Pick<BaseFields,"service"|"requestId"|"module">>): Logger;
+}
+
+const noop = async () => {};
+const noopLogger: Logger = {
+  write: () => {},
+  debug: () => {}, info: () => {}, warn: () => {}, error: () => {},
+  logError: () => {}, flushAndClose: noop, setLevel: () => {},
+  child: () => noopLogger,
 };
-const RESET = "\x1b[0m";
 
-/* ===== Подготовка директории ===== */
-if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
-
-/* ===== Класс Logger ===== */
-class Logger {
+// ── серверная реализация (создаётся лениво) ───────────────────────────────────
+class ServerLogger implements Logger {
   private level: LogLevel;
-  private ctx: Partial<Pick<BaseFields, "service" | "requestId" | "module">>;
-  private stream: import("fs").WriteStream;
-  private currentDay: string;
+  private ctx: Partial<Pick<BaseFields,"service"|"requestId"|"module">> = {};
+  private stream: import("fs").WriteStream | null = null;
+  private currentDay = dayStamp();
   private bytesWritten = 0;
 
   constructor(opts?: { level?: LogLevel; service?: string; module?: string }) {
     this.level = opts?.level || LOG_LEVEL;
-    this.ctx = {};
     if (opts?.service) this.ctx.service = opts.service;
     if (opts?.module)  this.ctx.module  = opts.module;
-
-    this.currentDay = dayStamp();
-    this.stream = this.openStream();
-
-    this.stream.on("error", (err) => {
-      // последний рубеж — только консоль
-      console.error("Logger stream error:", err);
-    });
   }
 
-  /** Создаём/открываем текущий файл логов */
-  private openStream() {
-    const fileName = `${LOG_BASE}-${this.currentDay}.log`;
-    const p = path.join(LOG_DIR, fileName);
+  private ensureStream() {
+    if (this.stream) return;
+    // Подключаем fs ТОЛЬКО здесь, когда мы уже уверены что не билд и не клиент
+    const { createWriteStream, existsSync, mkdirSync, renameSync, statSync } = require("fs") as typeof import("fs");
+    if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
 
-    try {
-      const s = statSync(p);
-      this.bytesWritten = s.size;
-    } catch {
-      this.bytesWritten = 0;
-    }
-
-    return createWriteStream(p, { flags: "a", mode: 0o600 });
+    const filePath = path.join(LOG_DIR, `${LOG_BASE}-${this.currentDay}.log`);
+    try { const st = statSync(filePath); this.bytesWritten = st.size; } catch { this.bytesWritten = 0; }
+    this.stream = createWriteStream(filePath, { flags: "a", mode: 0o600 });
+    this.stream.on("error", (err: unknown) => { console.error("Logger stream error:", err); });
   }
 
-  /** Проверяем и делаем ротацию (по дню/размеру) */
   private rotateIfNeeded() {
+    const { renameSync } = require("fs") as typeof import("fs");
     let needRotate = false;
-
     if (ROTATE_DAILY) {
-      const nowDay = dayStamp();
-      if (nowDay !== this.currentDay) {
-        this.currentDay = nowDay;
-        needRotate = true;
-      }
+      const now = dayStamp();
+      if (now !== this.currentDay) { this.currentDay = now; needRotate = true; }
     }
     if (this.bytesWritten >= MAX_BYTES) {
-      // Перекладываем текущий файл с суффиксом времени
       const current = path.join(LOG_DIR, `${LOG_BASE}-${this.currentDay}.log`);
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const rotated = path.join(LOG_DIR, `${LOG_BASE}-${this.currentDay}-${stamp}.log`);
       try { renameSync(current, rotated); } catch { /* ignore */ }
       needRotate = true;
     }
-
     if (needRotate) {
-      try { this.stream.close(); } catch { /* ignore */ }
-      this.stream = this.openStream();
+      try { this.stream?.close(); } catch { /* ignore */ }
+      this.stream = null;
+      this.ensureStream();
     }
   }
 
-  /** Изменить уровень на лету */
-  setLevel(level: LogLevel) {
-    this.level = level;
+  setLevel(level: LogLevel) { this.level = level; }
+
+  child(ctx: Partial<Pick<BaseFields,"service"|"requestId"|"module">>): Logger {
+    const c = new ServerLogger({ level: this.level });
+    c.ctx = { ...this.ctx, ...ctx };
+    (c as any).stream = this.stream;
+    (c as any).currentDay = this.currentDay;
+    (c as any).bytesWritten = this.bytesWritten;
+    return c;
   }
 
-  /** Создать дочерний логгер с добавленным контекстом */
-  child(ctx: Partial<Pick<BaseFields, "service" | "requestId" | "module">>) {
-    const child = new Logger({ level: this.level });
-    child.ctx = { ...this.ctx, ...ctx };
-    // переиспользуем тот же файл/стрим
-    child.stream = this.stream;
-    child.currentDay = this.currentDay;
-    child.bytesWritten = this.bytesWritten;
-    return child;
+  write(level: LogLevel, msg: string, meta?: unknown): void {
+    this._write(level, { message: msg, ...(meta ? { meta } : {}) });
   }
 
-  /* ---- Основной метод записи ---- */
-  private write(level: LogLevel, data: AnyRecord) {
+  debug(obj: AnyRecord) { this._write("debug", obj); }
+  info(obj: AnyRecord)  { this._write("info",  obj); }
+  warn(obj: AnyRecord)  { this._write("warn",  obj); }
+  error(obj: AnyRecord) { this._write("error", obj); }
+
+  private _write(level: LogLevel, data: AnyRecord) {
     if (LEVEL_RANK[level] < LEVEL_RANK[this.level]) return;
 
-    const base: BaseFields = {
-      timestamp: new Date().toISOString(),
-      level,
-      ...this.ctx,
-    };
-
+    const base: BaseFields = { timestamp: new Date().toISOString(), level, ...this.ctx };
     const record = maskSensitive({ ...base, ...data });
     const line = safeStringify(record) + "\n";
 
-    // Ротация до записи
-    this.rotateIfNeeded();
-
-    // Пишем
-    const ok = this.stream.write(line);
-    this.bytesWritten += Buffer.byteLength(line, "utf8");
-
-    // Если backpressure — подождём drain, чтобы не захламлять буфер
-    if (!ok) {
-      this.stream.once("drain", () => { /* no-op: просто сбросили давление */ });
-    }
-
-    // Дублируем в консоль при dev
+    // В dev — всегда в консоль
     if (process.env.NODE_ENV !== "production") {
       const color = COLORS[level] || "";
-      const reset = RESET;
-      // Короткая «красивая» строка + деталь в инспекте
-      // Не печатаем второй раз огромный JSON: покажем ключевые поля и объект
-      const { timestamp, level: lv, ...rest } = record;
-      const head = `${color}${timestamp} [${lv.toUpperCase()}]${reset}` +
-                   (record.module ? ` ${record.module}` : "") +
-                   (record.requestId ? ` req=${record.requestId}` : "");
-      // Для краткости печатаем как util.inspect (одноуровневый)
+      const { timestamp, level: lv, ...rest } = record as any;
+      const head = `${color}${timestamp} [${String(lv).toUpperCase()}]${RESET}` +
+        (record.module ? ` ${record.module}` : "") +
+        (record.requestId ? ` req=${record.requestId}` : "");
       console.log(head, util.inspect(rest, { depth: 2, breakLength: 120, maxArrayLength: 50 }));
     }
+
+    // В build-phase/клиенте — НИЧЕГО fs, просто выходим
+    if (isClient || isBuildPhase) return;
+
+    // Серверный путь: лениво открываем стрим и пишем
+    this.ensureStream();
+    this.rotateIfNeeded();
+    const ok = this.stream!.write(line);
+    this.bytesWritten += Buffer.byteLength(line, "utf8");
+    if (!ok) this.stream!.once("drain", () => {});
   }
 
-  /* ---- Публичные методы ---- */
-  debug(obj: AnyRecord) { this.write("debug", obj); }
-  info(obj: AnyRecord)  { this.write("info",  obj); }
-  warn(obj: AnyRecord)  { this.write("warn",  obj); }
-  error(obj: AnyRecord) { this.write("error", obj); }
-
-  /** Спец-хелпер для ошибок */
   logError(err: unknown, extra: AnyRecord = {}) {
-    if (err instanceof Error) {
-      this.error({ message: err.message, stack: err.stack, name: err.name, ...extra });
-    } else {
-      this.error({ message: "Non-Error thrown", value: err, ...extra });
-    }
+    if (err instanceof Error) this.error({ message: err.message, stack: err.stack, name: err.name, ...extra });
+    else this.error({ message: "Non-Error thrown", value: err, ...extra });
   }
 
-  /** Аккуратно закрыть лог (например, в обработчике SIGTERM) */
   async flushAndClose(): Promise<void> {
-    await new Promise<void>((resolve) => this.stream.end(resolve));
+    if (!this.stream) return;
+    await new Promise<void>((resolve) => this.stream!.end(resolve));
   }
 }
 
-/* ===== Экспорт: базовый логгер и удобные утилиты ===== */
+// ── ленивый синглтон ──────────────────────────────────────────────────────────
+// на клиенте/в build-phase возвращаем noop; на сервере — серверную реализацию
+let _loggerSingleton: Logger | null = null;
+export function getLogger(name = process.env.SERVICE_NAME): Logger {
+  if (isClient || isBuildPhase) return noopLogger;
+  if (_loggerSingleton) return _loggerSingleton;
+  _loggerSingleton = new ServerLogger({ level: LOG_LEVEL, service: name });
+  return _loggerSingleton;
+}
 
-export const logger = new Logger({ level: LOG_LEVEL, service: process.env.SERVICE_NAME });
-
-/** Быстрый доступ к уровням (коротко) */
+// Быстрые алиасы (без побочек при импорте)
 export const log = {
-  debug: (obj: AnyRecord) => logger.debug(obj),
-  info:  (obj: AnyRecord) => logger.info(obj),
-  warn:  (obj: AnyRecord) => logger.warn(obj),
-  error: (obj: AnyRecord) => logger.error(obj),
-  errorEx: (err: unknown, extra?: AnyRecord) => logger.logError(err, extra),
+  debug: (obj: AnyRecord) => getLogger().debug(obj),
+  info:  (obj: AnyRecord) => getLogger().info(obj),
+  warn:  (obj: AnyRecord) => getLogger().warn(obj),
+  error: (obj: AnyRecord) => getLogger().error(obj),
+  errorEx: (err: unknown, extra?: AnyRecord) => getLogger().logError(err, extra),
 };
 
-/** Генерация/прокидывание requestId — используйте где нужно */
 export function ensureRequestId(existing?: string | null): string {
   if (existing && typeof existing === "string" && existing.length >= 8) return existing;
   return randomUUID();
 }
 
-/** Грейсфул завершение: вызвать при выходе сервиса */
 export async function shutdownLogger() {
-  try {
-    await logger.flushAndClose();
-  } catch { /* ignore */ }
+  await getLogger().flushAndClose();
 }
