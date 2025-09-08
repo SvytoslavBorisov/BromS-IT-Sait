@@ -953,11 +953,28 @@ export default function GamePage() {
     </div>
   );
 
-  const share = () => {
-    const url = encodeURIComponent((globalThis as any)?.location?.href || "");
-    const text = encodeURIComponent(`Мой счёт в City Runner: ${score}! Попробуешь обогнать?`);
-    const link = `https://t.me/share/url?url=${url}&text=${text}`;
-    (globalThis as any)?.Telegram?.WebApp?.openTelegramLink?.(link);
+  // на клиенте
+  const share = async () => {
+    const tg = (window as any)?.Telegram?.WebApp;
+    const initData = tg?.initData || ""; // сырая строка!
+
+    const payload = {
+      text: `Мой счёт в City Runner: ${score}! Попробуешь обогнать?`,
+      url: window.location.origin + "/game",
+      button_text: "Играть",
+      peer_types: ["users","groups","channels"], // можно сузить
+      initData, // передаём как есть
+    };
+
+    const r = await fetch("/api/tg/prepared", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error);
+
+    tg?.shareMessage?.(data.id);
   };
 
   return (
