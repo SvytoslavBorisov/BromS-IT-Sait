@@ -1,20 +1,22 @@
 // src/lib/telegram/webapp.ts
 import crypto from "crypto";
 
-export function verifyWebAppInitData(initData: string, botToken: string): boolean {
+/** Проверяет Telegram WebApp initData (hash) */
+export function verifyTelegramInitData(initData: string, botToken: string): boolean {
   if (!initData || !botToken) return false;
+  const urlParams = new URLSearchParams(initData);
+  const hash = urlParams.get("hash") || "";
+  urlParams.delete("hash");
 
-  const params = new URLSearchParams(initData);
-  const hash = params.get("hash") || "";
-  params.delete("hash");
+  const dataCheckArr: string[] = [];
+  urlParams.forEach((value, key) => {
+    dataCheckArr.push(`${key}=${value}`);
+  });
+  dataCheckArr.sort((a, b) => a.localeCompare(b));
+  const dataCheckString = dataCheckArr.join("\n");
 
-  const dataCheckString = Array.from(params.entries())
-    .map(([k, v]) => `${k}=${v}`)
-    .sort()
-    .join("\n");
-
-  const secret = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
-  const hmac = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
+  const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+  const hmac = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
   return hmac === hash;
 }
 

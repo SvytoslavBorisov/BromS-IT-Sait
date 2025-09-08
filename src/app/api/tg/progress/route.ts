@@ -1,6 +1,6 @@
 // src/app/api/tg/progress/route.ts
 import { NextRequest } from "next/server";
-import { verifyWebAppInitData, parseWebAppInitData } from "@/lib/telegram/webapp";
+import { verifyTelegramInitData, parseWebAppInitData } from "@/lib/telegram/webapp";
 import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const initData = req.headers.get("x-telegram-init-data") || "";
     const token = process.env.BOT_TOKEN || "";
 
-    if (!verifyWebAppInitData(initData, token)) {
+    if (!verifyTelegramInitData(initData, token)) {
       return Response.json({ ok: false, error: "invalid initData" }, { status: 401 });
     }
 
