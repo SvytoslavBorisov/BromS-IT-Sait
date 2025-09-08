@@ -88,13 +88,13 @@ function checkWebhookSecret(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Сам вебхук
-const webhookCb = bot.webhookCallback(WEBHOOK_PATH, 'express');
+// Сам вебхук\
 
-app.post(WEBHOOK_PATH, webhookLimiter, checkWebhookSecret, (req, res) => {
-  return webhookCb(req, res);
+const webhookCb = bot.webhookCallback(WEBHOOK_PATH, {
+  // если не используешь секрет — можно опустить поле
+  secretToken: process.env.WEBHOOK_SECRET || undefined,
 });
-
+app.post(WEBHOOK_PATH, webhookLimiter, webhookCb);
 app.post('/api/progress', async (req: Request, res: Response) => {
   try {
     // initData передаём из web-app в заголовке
