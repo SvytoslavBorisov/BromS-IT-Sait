@@ -21,6 +21,7 @@
         "name": "next"
       }
     ],
+    "types": ["styled-jsx", "node", "react"],
     "typeRoots": ["./src/types", "./node_modules/@types"],
     "paths": {
       "@/*": ["./src/*"],

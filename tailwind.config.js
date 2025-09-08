@@ -22,6 +22,12 @@ module.exports = {
           },
         },
       }),
+      keyframes: {
+        scan: { from: { transform: "translateX(-25%)" }, to: { transform: "translateX(25%)" } },
+      },
+      animation: {
+        scan: "scan 9s linear infinite",
+      },
     },
   },
   plugins: [],

@@ -1,3 +1,4 @@
+// app/MainPageClient.tsx
 "use client";
 
 import React from "react";
@@ -7,15 +8,34 @@ import HeroSection from "@/components/HeroSection";
 import AboutSection from "@/components/AboutSection";
 import ProjectsSection from "@/components/ProjectSection";
 import ContactSection from "@/components/ContactSection";
+import SectionDivider from "@/components/SectionDivider";
+import SectionDividerBW from "@/components/SectionDividerBW";
+import GlobalLightAbstractBg from "./GlobalLightAbstractBg";
 
 export default function MainPageClient() {
   return (
-    <div>
+    <div className="relative scroll-smooth bg-white text-neutral-900">
+      {/* ЕДИНЫЙ светлый абстрактный фон для всех белых секций */}
+      <GlobalLightAbstractBg />
+
+      {/* hairline под шапкой */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 top-0 z-30 h-px
+                   bg-gradient-to-r from-transparent via-neutral-200 to-transparent"
+      />
+
       <Header />
-      <HeroSection />
-      <AboutSection />
-      <ProjectsSection />
-      <ContactSection />
+      <main>
+        <HeroSection />
+        <SectionDivider />     {/* волна вниз (светлая) */}
+        <AboutSection />
+        <SectionDivider flip />{/* волна вверх */}
+        <ProjectsSection />
+        <SectionDivider flip />
+        <ContactSection />
+        <SectionDividerBW />
+      </main>
       <Footer />
     </div>
   );

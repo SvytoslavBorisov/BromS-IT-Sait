@@ -1,39 +1,51 @@
-<section class="relative w-full h-full overflow-hidden shadow-lg bg-[rgb(5,5,5)]">
-  <!-- Фоновое изображение -->
-  <img
-    src="football_bg.webp"
-    alt="Футбол России"
-    class="absolute inset-0 w-full h-full object-cover object-top"
-  />
+<section class="relative w-full h-full overflow-hidden bg-white">
+  <!-- Фон-фото -->
+  <img src="football_bg.webp" alt="Футбол России"
+       class="absolute inset-0 w-full h-full object-cover object-top" />
 
-  <!-- Мобилки: вверх, десктоп: вправо -->
+  <!-- Аврора (мягкие пятна) -->
+  <div class="pointer-events-none absolute inset-0 -z-[1]">
+    <div class="absolute -top-24 -right-24 w-[34rem] h-[34rem] rounded-full
+                bg-[radial-gradient(closest-side,rgba(167,243,208,0.9),transparent_62%)]
+                blur-3xl opacity-80 mix-blend-multiply"></div>
+    <div class="absolute bottom-[-10rem] left-[12%] w-[28rem] h-[28rem] rounded-full
+                bg-[radial-gradient(closest-side,rgba(199,210,254,0.85),transparent_62%)]
+                blur-3xl opacity-70 mix-blend-multiply"></div>
+  </div>
 
-  <div class="absolute inset-0 bg-gradient-to-t md:bg-gradient-to-r from-transparent from-90% md:from-transparent  md:from-20% to-[rgb(5,5,5)]"></div>
-  <div class="absolute inset-0 md:bg-gradient-to-l md:from-transparent  md:from-40% md:to-[rgb(5,5,5)]"></div>
+  <!-- Сетка (еле заметная) -->
+  <div class="pointer-events-none absolute inset-0 opacity-[.06]
+              [background-image:radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.9)_1px,transparent_1px)]
+              [background-size:22px_22px]
+              [mask-image:linear-gradient(to_bottom,transparent,black_12%,black_88%,transparent)]"></div>
 
-  <!-- Десктопный градиент: слева направо -->
-  <div
-    class="z-4 absolute inset-0 bg-gradient-to-r from-transparent from-98% to-[rgb(5,5,5)] hidden md:block"
-  ></div>
+  <!-- Маски для читаемости текста: моб. снизу, десктоп справа -->
+  <div class="absolute inset-0 bg-gradient-to-b from-white/60 via-transparent to-transparent md:hidden"></div>
+  <div class="absolute inset-0 hidden md:block bg-gradient-to-r from-white/60 via-transparent to-transparent"></div>
 
-  <div
-    class="z-4 absolute inset-0 bg-gradient-to-t from-transparent from-98% to-[rgb(255,255,255)] hidden md:block"
-  ></div>
+  <!-- Контентный стеклянный блок -->
+  <div class="absolute inset-x-0 bottom-0 md:inset-auto md:bottom-8 md:left-8 md:max-w-[560px]">
+    <div class="m-4 md:m-0 rounded-3xl bg-white/70 backdrop-blur-xl ring-1 ring-black/10
+                shadow-[0_28px_120px_-40px_rgba(0,0,0,0.35)] p-5 md:p-7 relative overflow-hidden">
+      <span class="pointer-events-none absolute inset-0 rounded-3xl
+                   bg-gradient-to-br from-white/40 to-transparent"></span>
 
-  <div
-    class="z-4 absolute inset-0 bg-gradient-to-b from-transparent from-98% to-[rgb(255,255,255)] hidden md:block"
-  ></div>
+      <h2 class="relative z-10 text-2xl md:text-[28px] font-semibold text-neutral-900">
+        Викторина «Футбол России»
+      </h2>
+      <p class="relative z-10 mt-2 text-neutral-700">
+        Проверь знания российского футбола — клубы, матчи и легенды.
+      </p>
 
-  <!-- Поле для текста и ссылки -->
-  <div class="z-3 absolute bottom-0 left-0 w-full bg-black/50 p-6">
-    <h2 class="text-2xl font-bold mb-2 text-white">Викторина Футбол России</h2>
-    <p class="mb-4 text-white">Проверь знания русского футбола</p>
-    <!-- Ссылка-параграф: z-30 -->
-    <p
-      onclick="window.open('https://www.rustore.ru/catalog/app/ru.worklight64.footballquiz', '_blank')"
-      class="relative z-4 cursor-pointer inline-block bg-white/20 hover:bg-white/30 rounded px-4 py-2 text-white"
-    >
-      Скачать в RuStore
-    </p>
+      <a href="https://www.rustore.ru/catalog/app/ru.worklight64.footballquiz" target="_blank" rel="noopener"
+         class="relative z-10 mt-4 inline-flex items-center gap-2 rounded-full
+                bg-white/80 hover:bg-white px-4 py-2 ring-1 ring-black/10 text-neutral-900
+                transition active:scale-[0.99]">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="opacity-80">
+          <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Скачать в RuStore
+      </a>
+    </div>
   </div>
 </section>

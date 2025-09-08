@@ -11,7 +11,8 @@ const GraffitiTracer = dynamic(() => import("./GraffitiPage"), { ssr: false });
 const PaintByNumbers = dynamic(() => import("./PaintByNumbers"), { ssr: false });
 const GrayRabkin = dynamic(() => import("./GrayRabkin"), { ssr: false });
  const LightBeamsDemo = dynamic(() => import("./ColorLuch"), { ssr: false });
- 
+ const ColorMixConnect = dynamic(() => import("./ColorPath"), { ssr: false });
+
 type PageProps = { params: Promise<{ level: string }> };
 
 export default function Page({ params }: PageProps) {
@@ -25,6 +26,7 @@ export default function Page({ params }: PageProps) {
   if (level === "6") return <PaintByNumbers />;
   if (level === "7") return <GrayRabkin />;
   if (level === "8") return <LightBeamsDemo />;
+  if (level === "9") return <ColorMixConnect />;
 
   return notFound();
 }
