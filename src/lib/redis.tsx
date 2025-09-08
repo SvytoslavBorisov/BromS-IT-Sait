@@ -104,3 +104,4 @@ export async function getRedlock(): Promise<RedlockLike> {
 
 
 export { memRedis as redis };
+export { memRedlock as memRedlock };
