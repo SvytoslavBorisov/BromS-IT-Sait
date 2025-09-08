@@ -1,21 +1,17 @@
 {
-  "name": "tg-bot",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "tg-miniapp-monorepo",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev:web": "pnpm --filter @app/web dev",
+    "dev:bot": "pnpm --filter @app/bot dev",
+    "dev": "concurrently -n web,bot -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:bot\"",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @app/web start & pnpm --filter @app/bot start"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "compression": "^1.8.1",
-    "dotenv": "^17.2.2",
-    "express": "^5.1.0",
-    "express-rate-limit": "^8.1.0",
-    "morgan": "^1.10.1",
-    "telegraf": "^4.16.3"
-  }
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "typescript": "^5.5.4"
+  },
+  "packageManager": "pnpm@9.12.0"
 }
