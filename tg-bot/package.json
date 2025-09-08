@@ -1,5 +1,5 @@
 {
-  "name": "tg-miniapp-monorepo",
+  "name": "tg-bot",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
