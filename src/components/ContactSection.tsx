@@ -5,17 +5,57 @@ import ContactForm from "@/components/ContactForm";
 import { motion, useReducedMotion } from "framer-motion";
 import React from "react";
 
+/* ===== Константы вне рендера ===== */
 const EASE = [0.4, 0, 0.2, 1] as const;
+const VIEWPORT_06_ONCE = { amount: 0.6, once: true } as const;
+const VIEWPORT_055_ONCE = { amount: 0.55, once: true } as const;
+const CHIPS = ["Next.js", "React", "Интеграции", "Безопасность", "Поддержка"] as const;
 
-function ContactBackground({ reduced }: { reduced: boolean }) {
+/* Статические локальные стили (styled-jsx) */
+const BG_CSS = `
+  .aurora { position:absolute; filter:blur(80px); opacity:.42; mix-blend-mode:multiply; }
+  .a1 { width:36rem; height:36rem; right:-8rem; top:-6rem;
+        background:radial-gradient(50% 50% at 50% 50%, #f5f5f5 0%, rgba(255,255,255,0) 60%);
+        animation: floatA 20s ease-in-out infinite; }
+  .a2 { width:28rem; height:28rem; left:8%; bottom:-6rem;
+        background:radial-gradient(50% 50% at 50% 50%, #efefef 0%, rgba(255,255,255,0) 60%);
+        animation: floatB 24s ease-in-out infinite; }
+  .a3 { width:22rem; height:22rem; right:22%; bottom:-10rem;
+        background:radial-gradient(50% 50% at 50% 50%, #ffffff 0%, rgba(255,255,255,0) 60%);
+        animation: floatC 28s ease-in-out infinite; }
+
+  @keyframes floatA{0%{transform:translate3d(0,0,0)}50%{transform:translate3d(-4%,6%,0)}100%{transform:translate3d(0,0,0)}}
+  @keyframes floatB{0%{transform:translate3d(0,0,0)}50%{transform:translate3d(6%,-4%,0)}100%{transform:translate3d(0,0,0)}}
+  @keyframes floatC{0%{transform:translate3d(0,0,0)}50%{transform:translate3d(-3%,-6%,0)}100%{transform:translate3d(0,0,0)}}
+
+  .gridlines{
+    position:absolute; inset:0; opacity:.06;
+    background-image:radial-gradient(circle at 1px 1px, #000 1px, transparent 0);
+    background-size:22px 22px;
+    mask-image:linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
+    animation:gridShift 40s linear infinite;
+  }
+  @keyframes gridShift{from{transform:translate3d(0,0,0)}to{transform:translate3d(-22px,-22px,0)}}
+
+  /* Отключение анимаций через класс .reduced — без динамического CSS */
+  .reduced .a1, .reduced .a2, .reduced .a3, .reduced .gridlines { animation: none !important; }
+
+  /* Также уважаем системную настройку */
+  @media (prefers-reduced-motion: reduce) {
+    .a1, .a2, .a3, .gridlines { animation: none !important; }
+  }
+`;
+
+/* ===== Фон секции: аврора + сетка под контентом (pure) ===== */
+const ContactBackground = React.memo(function ContactBackground({ reduced }: { reduced: boolean }) {
   return (
     <>
-      {/* мягкие белые «шторы», чтобы не было стыков с соседними блоками */}
+      {/* «шторы» для мягких стыков */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white to-transparent z-0" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent z-0" />
 
-      {/* аврора + сетка под контентом */}
-      <div className="pointer-events-none absolute inset-0 -z-10">
+      {/* аврора + сетка */}
+      <div className={`pointer-events-none absolute inset-0 -z-10 ${reduced ? "reduced" : ""}`}>
         <div className="absolute -top-16 -left-24 h-[26rem] w-[26rem] rounded-full bg-black/[0.04] blur-3xl" />
         <div className="aurora a1" />
         <div className="aurora a2" />
@@ -23,40 +63,14 @@ function ContactBackground({ reduced }: { reduced: boolean }) {
         <div className="gridlines" />
       </div>
 
-      {/* локальные стили и keyframes */}
-      <style jsx>{`
-        .aurora { position:absolute; filter:blur(80px); opacity:.42; mix-blend-mode:multiply; }
-        .a1 { width:36rem; height:36rem; right:-8rem; top:-6rem;
-              background:radial-gradient(50% 50% at 50% 50%, #f5f5f5 0%, rgba(255,255,255,0) 60%);
-              animation:${reduced ? "none" : "floatA 20s ease-in-out infinite"}; }
-        .a2 { width:28rem; height:28rem; left:8%; bottom:-6rem;
-              background:radial-gradient(50% 50% at 50% 50%, #efefef 0%, rgba(255,255,255,0) 60%);
-              animation:${reduced ? "none" : "floatB 24s ease-in-out infinite"}; }
-        .a3 { width:22rem; height:22rem; right:22%; bottom:-10rem;
-              background:radial-gradient(50% 50% at 50% 50%, #ffffff 0%, rgba(255,255,255,0) 60%);
-              animation:${reduced ? "none" : "floatC 28s ease-in-out infinite"}; }
-
-        @keyframes floatA{0%{transform:translate3d(0,0,0)}50%{transform:translate3d(-4%,6%,0)}100%{transform:translate3d(0,0,0)}}
-        @keyframes floatB{0%{transform:translate3d(0,0,0)}50%{transform:translate3d(6%,-4%,0)}100%{transform:translate3d(0,0,0)}}
-        @keyframes floatC{0%{transform:translate3d(0,0,0)}50%{transform:translate3d(-3%,-6%,0)}100%{transform:translate3d(0,0,0)}}
-
-        .gridlines{
-          position:absolute; inset:0; opacity:.06;
-          background-image:radial-gradient(circle at 1px 1px, #000 1px, transparent 0);
-          background-size:22px 22px;
-          mask-image:linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
-          ${reduced ? "" : "animation:gridShift 40s linear infinite;"}
-        }
-        @keyframes gridShift{from{transform:translate3d(0,0,0)}to{transform:translate3d(-22px,-22px,0)}}
-      `}</style>
+      <style jsx>{BG_CSS}</style>
     </>
   );
-}
+});
 
+/* ===== Основная секция ===== */
 export default function ContactSection() {
   const reduced = useReducedMotion();
-
-  const chips = ["Next.js", "React", "Интеграции", "Безопасность", "Поддержка"];
 
   return (
     <section id="contact" className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28">
@@ -70,7 +84,7 @@ export default function ContactSection() {
               className="text-4xl md:text-5xl font-semibold tracking-tight"
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
+              viewport={VIEWPORT_06_ONCE}
               transition={{ duration: 0.6, ease: EASE }}
             >
               Свяжитесь с нами
@@ -80,22 +94,22 @@ export default function ContactSection() {
               className="mt-4 text-neutral-600 leading-relaxed"
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
+              viewport={VIEWPORT_06_ONCE}
               transition={{ duration: 0.65, ease: EASE, delay: 0.08 }}
             >
               Опишите задачу — вернёмся с вариантами решения и оценкой сроков.
               Минимум формальностей, максимум пользы.
             </motion.p>
 
-            {/* Бейджи, «дышащие» как в «О нас» */}
+            {/* Бейджи */}
             <div className="mt-6 flex flex-wrap gap-2">
-              {chips.map((t, i) => (
+              {CHIPS.map((t, i) => (
                 <motion.span
                   key={t}
                   className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm"
                   initial={{ opacity: 0, y: 8 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
+                  viewport={VIEWPORT_06_ONCE}
                   animate={reduced ? {} : { y: [0, -2, 0] }}
                   transition={{ duration: 2.0, ease: EASE, repeat: Infinity, delay: 0.08 * i }}
                 >
@@ -109,6 +123,7 @@ export default function ContactSection() {
               <a
                 href="https://t.me/+fnL2WMHosstjY2Qy"
                 target="_blank"
+                rel="noopener noreferrer"
                 className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-black text-white px-4 py-3 text-sm font-medium shadow hover:-translate-y-0.5 transition"
               >
                 Telegram
@@ -124,7 +139,6 @@ export default function ContactSection() {
               </a>
             </div>
 
-            {/* Микро-доверие */}
             <div className="mt-5 text-xs text-neutral-500">
               Обычно отвечаем в течение <span className="font-medium text-neutral-700">1–2 часов</span> в будни.
             </div>
@@ -135,10 +149,9 @@ export default function ContactSection() {
             className="relative rounded-3xl bg-white/70 backdrop-blur-xl ring-1 ring-black/10 shadow-[0_20px_6px_-20px_rgba(0,0,0,.25)] p-5 md:p-8"
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             whileInView={{ opacity: 1, y: 0, scale: 1 }}
-            viewport={{ once: true, amount: 0.55 }}
+            viewport={VIEWPORT_055_ONCE}
             transition={{ duration: 0.7, ease: EASE }}
           >
-            {/* подсветка-глянец */}
             <span className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-white/40 to-transparent" />
             <ContactForm />
           </motion.div>

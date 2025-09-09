@@ -2,16 +2,14 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useCallback, useEffect, useId, useRef, useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 const NAV = [
   { href: "#about", label: "О нас" },
   { href: "#portfolio", label: "Портфолио" },
   { href: "#contact", label: "Контакты" },
-];
+] as const;
 
 const EASE = [0.4, 0, 0.2, 1] as const;
 
@@ -51,39 +49,25 @@ function AnimatedHamburger({
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const [active, setActive] = useState<string>("#about");
   const [progress, setProgress] = useState(0);
   const prefersReduced = useReducedMotion();
-  const id = useId();
-  const ctaRef = useRef<HTMLAnchorElement | null>(null);
 
+  // Прогресс чтения
   useEffect(() => {
-    let last = 0;
     const onScroll = () => {
-      const y = window.scrollY || 0;
-      setProgress(() => {
-        const doc = document.documentElement;
-        const max = (doc.scrollHeight - doc.clientHeight) || 1;
-        return Math.min(1, Math.max(0, y / max));
-      });
-
-      // гистерезис: включаем после 24px, выключаем ниже 12px
-      setScrolled((prev) => {
-        if (!prev && y > 24) return true;
-        if (prev && y < 12) return false;
-        return prev;
-      });
-
-      last = y;
+      const doc = document.documentElement;
+      const max = (doc.scrollHeight - doc.clientHeight) || 1;
+      setProgress(Math.min(1, Math.max(0, (window.scrollY || 0) / max)));
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Подсветка активного раздела
   useEffect(() => {
-    const ids = NAV.map((n) => n.href.replace("#", ""));
+    const ids = NAV.map((n) => n.href.slice(1));
     const obs = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && setActive(`#${e.target.id}`)),
       { rootMargin: "-45% 0px -45% 0px", threshold: 0.01 }
@@ -99,37 +83,13 @@ export default function Header() {
     (href: string) => (e: React.MouseEvent) => {
       if (!href.startsWith("#")) return;
       e.preventDefault();
-      const target = document.querySelector(href) as HTMLElement | null;
-      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.querySelector(href)?.scrollIntoView({ behavior: "smooth", block: "start" });
       setIsOpen(false);
     },
     []
   );
 
-  // floating pill
-  const railRef = useRef<HTMLDivElement>(null);
-  const linkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
-  const [pill, setPill] = useState<{ left: number; width: number } | null>(null);
-  const recalcPill = useCallback(() => {
-    const rail = railRef.current;
-    const link = linkRefs.current[active];
-    if (!rail || !link) return;
-    const r = rail.getBoundingClientRect();
-    const l = link.getBoundingClientRect();
-    setPill({ left: l.left - r.left, width: l.width });
-  }, [active]);
-  useEffect(() => {
-    recalcPill();
-    const on = () => recalcPill();
-    window.addEventListener("resize", on);
-    const ro = new ResizeObserver(on);
-    if (railRef.current) ro.observe(railRef.current);
-    return () => {
-      window.removeEventListener("resize", on);
-      ro.disconnect();
-    };
-  }, [recalcPill]);
-
+  // Блокируем скролл боди при открытом меню
   useEffect(() => {
     if (!isOpen) return;
     const prev = document.body.style.overflow;
@@ -142,12 +102,8 @@ export default function Header() {
     "text-slate-700 hover:text-slate-900 hover:bg-indigo-50/60 aria-[current=true]:text-white";
 
   return (
-    <header
-      className={[
-        "fixed top-0 left-0 right-0 z-50 transition backdrop-blur-xl",
-      ].join(" ")}
-    >
-      {/* Reading progress + «комета» */}
+    <header className="fixed top-0 left-0 right-0 z-50 transition backdrop-blur-xl">
+      {/* Reading progress + cometa */}
       <div className="absolute inset-x-0 top-0 h-[2px] overflow-visible">
         <div
           className="h-full origin-left bg-gradient-to-r from-indigo-600 via-sky-500 to-cyan-400"
@@ -162,9 +118,7 @@ export default function Header() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 md:px-6">
-        <motion.div
-          className="h-16 md:h-[4.75rem] flex items-center justify-between"
-        >
+        <motion.div className="h-16 md:h-[4.75rem] flex items-center justify-between">
           {/* Brand */}
           <Link href="#top" onClick={smoothTo("#top")} className="inline-flex items-center gap-2 select-none">
             <motion.span
@@ -188,36 +142,18 @@ export default function Header() {
 
           {/* Desktop nav */}
           <nav className="hidden md:block">
-            <div
-              ref={railRef}
-              className="relative flex items-center gap-1 rounded-full px-1 py-1 backdrop-blur
-                         ring-1 ring-black/10 bg-white/70"
-            >
-              {pill && (
-                <motion.span
-                  aria-hidden
-                  className="absolute top-1/2 -translate-y-1/2 h-9 rounded-full
-                             shadow-[0_8px_22px_-10px_rgba(0,0,0,.35)]
-                             bg-gradient-to-r from-indigo-600 to-cyan-500"
-                  style={{ left: pill.left, width: pill.width }}
-                  layout
-                  transition={{ duration: 0.28, ease: EASE }}
-                />
-              )}
-
+            <div className="relative flex items-center gap-1 rounded-full px-1 py-1 backdrop-blur ring-1 ring-black/10 bg-white/70">
               {NAV.map((n) => (
                 <Link
                   key={n.href}
                   href={n.href}
                   aria-current={active === n.href}
-                  ref={ctaRef} 
                   onClick={smoothTo(n.href)}
                   className={capsule}
                 >
                   {n.label}
                 </Link>
               ))}
-
               <Link
                 href="#contact"
                 onClick={smoothTo("#contact")}
@@ -230,9 +166,7 @@ export default function Header() {
             </div>
           </nav>
 
-          {/* Mobile hamburger:
-              — в обычном состоянии внутри хедера
-              — в открытом состоянии фиксируется в правом краю экрана */}
+          {/* Mobile hamburger */}
           <AnimatedHamburger
             open={isOpen}
             onClick={() => setIsOpen((v) => !v)}
@@ -241,31 +175,10 @@ export default function Header() {
         </motion.div>
       </div>
 
-      {/* Тонкая аурора за шапкой (цветная, но очень деликатная) */}
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <style>{`
-          @keyframes auroraShift {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-          }
-          @media (prefers-reduced-motion: reduce) {
-            .aurora-shift { animation: none !important; }
-          }
-        `}</style>
-        {/* <div className="absolute inset-0 [mask-image:linear-gradient(to_bottom,transparent,black_25%,black_85%,transparent)]">
-          <div
-            className="aurora-shift absolute -inset-y-10 inset-x-0 h-[200%] w-[200%] opacity-[.15]
-                       bg-gradient-to-r from-indigo-300 via-sky-300 to-cyan-300 blur-2xl"
-            style={{ animation: "auroraShift 18s linear infinite" }}
-          />
-        </div> */}
-      </div>
-
-      {/* Mobile overlay + full-bleed panel */}
+      {/* Mobile overlay + panel */}
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* overlay — клик вне меню закрывает */}
             <motion.div
               key="overlay"
               initial={{ opacity: 0 }}
@@ -275,8 +188,6 @@ export default function Header() {
               className="md:hidden fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px]"
               onClick={() => setIsOpen(false)}
             />
-
-            {/* панель на всю ширину (в край) */}
             <motion.nav
               key="panel"
               initial={prefersReduced ? false : { y: -12, opacity: 0 }}
