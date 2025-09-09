@@ -6,8 +6,10 @@ import type { ReactNode } from "react";
 import { poppins, geistSans, geistMono } from "./fonts";
 import { YaMetrika } from "./_analytics/YaMetrika";
 import Script from "next/script";
-import './_build-guard';
-export const dynamic = "force-dynamic"; // отключаем SSG глобально
+import ClientBoot from "./_client-boot";     // ⬅️ новый клиентский компонент
+import "./_build-guard";
+
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const SITE_NAME = "Broms IT";
@@ -52,7 +54,9 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#0b0b0f" />
         <link rel="manifest" href="/site.webmanifest" />
         <link rel="preconnect" href="https://mc.yandex.ru" crossOrigin="" />
+        <link rel="dns-prefetch" href="https://mc.yandex.ru" />
 
+        {/* structured data (оставляю как у тебя) */}
         <Script
           id="ld-org"
           type="application/ld+json"
@@ -86,6 +90,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           }}
         />
       </head>
+
       <body
         className={[
           geistSans.variable,
@@ -96,8 +101,10 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           "supports-[backdrop-filter]:backdrop-blur-[0.5px]",
         ].join(" ")}
       >
+        {/* Метрика и клиентские провайдеры */}
         <YaMetrika id={YANDEX_METRIKA_ID} />
         <Providers>
+          <ClientBoot /> {/* ⬅️ все эффекты тут, layout остаётся серверным */}
           <div className="font-sans">
             <main>{children}</main>
           </div>

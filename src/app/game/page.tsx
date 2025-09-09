@@ -956,36 +956,39 @@ export default function GamePage() {
   // на клиенте
 const share = async () => {
   const tg = (window as any)?.Telegram?.WebApp;
-  if (!tg?.initData) {
-    tg?.showAlert?.('Открой игру из бота, а не по прямой ссылке');
-    return;
-  }
-
-  const href = window.location.origin + '/game';
+  const href = window.location.origin + "/game";
   const text = `Мой счёт в City Runner: ${score}! Попробуешь обогнать?`;
 
-  const r = await fetch('/api/tg/prepared', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      // 1) как заголовок
-      'x-telegram-init-data': tg.initData,
-    },
-    body: JSON.stringify({
-      text,
-      url: href,
-      button_text: 'Играть',
-      peer_types: ['users','groups','channels'],
-      // 2) дублируем в body (на случай, если заголовок срежут)
-      initData: tg.initData,
-    }),
-  });
+  try {
+    // (Не обязательно) убедимся, что WebApp готов
+    tg?.ready?.();
 
-  const data = await r.json();
-  if (!data.ok) throw new Error(data.error || 'prepare failed');
-  tg?.shareMessage?.(data.id);
+    const r = await fetch("/api/tg/prepared", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        // Лучше слать initData заголовком — меньше проблем с экранированием
+        "x-telegram-init-data": tg?.initData || "",
+      },
+      body: JSON.stringify({
+        text,
+        url: href,
+        button_text: "Играть",
+        peer_types: ["users","groups","channels"],
+        initData: tg?.initData, // можно и в body, если хочешь
+      }),
+    });
+
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || "prepare failed");
+
+    // Откроется пикер чатов
+    tg?.shareMessage?.(data.id);
+  } catch (e:any) {
+    console.error("share error:", e);
+    alert("Share error: " + (e?.message || e));
+  }
 };
-
 
   return (
     <div className="game-root">

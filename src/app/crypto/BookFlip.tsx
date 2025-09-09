@@ -64,8 +64,14 @@ export default function BookFlip() {
   }, [animDir, flipped]);
 
   useEffect(() => {
-    router.replace(flipped ? "?page=black" : "?page=white");
-  }, [flipped, router]);
+    const desired = flipped ? "black" : "white";
+    const current = search?.get("page") ?? "white";
+    if (current !== desired) {
+      // ВАЖНО: отключаем автоскролл App Router
+      router.replace(`?page=${desired}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flipped]);
 
   const startFlip = (to: "black" | "white") => {
     if (!rootRef.current) return;
@@ -88,10 +94,13 @@ export default function BookFlip() {
       onComplete: () => {
         setFlipped(to === "black");
         setAnimDir(null);
-        r.setProperty("--hFrom", to === "black" ? "var(--hBlack)" : "var(--hWhite)");
-        r.setProperty("--hTo",   to === "black" ? "var(--hBlack)" : "var(--hWhite)");
-        r.setProperty("--cut", to === "black" ? "100%" : "0%");
-        r.setProperty("--t",   to === "black" ? "1" : "0");
+
+        // сохраняем конечные значения только если реально меняем страницу
+        const targetVar = to === "black" ? "var(--hBlack)" : "var(--hWhite)";
+        r.setProperty("--hFrom", targetVar);
+        r.setProperty("--hTo",   targetVar);
+        r.setProperty("--cut",   to === "black" ? "100%" : "0%");
+        r.setProperty("--t",     to === "black" ? "1" : "0");
       },
     });
 

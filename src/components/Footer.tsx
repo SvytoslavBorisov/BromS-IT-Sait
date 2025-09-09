@@ -8,7 +8,6 @@ import { useReducedMotion } from "framer-motion";
 export default function Footer() {
   const currentYear = new Date().getFullYear();
   const prefersReduced = useReducedMotion();
-  const pointsRef = useRef<Point[]>([]);
 
   const links = [
     { href: "/", label: "Главная" },
@@ -20,8 +19,6 @@ export default function Footer() {
 
   return (
     <footer className="relative isolate overflow-hidden bg-[#0a0a0a] text-neutral-300 selection:bg-white/20">
-      {/* ——— Мягкая стыковка с белым блоком сверху + волна ——— */}
-
       {/* ——— Технологичный интерактивный фон (canvas-созвездие) ——— */}
       <TechConstellation reduced={!!prefersReduced} />
 
@@ -34,9 +31,8 @@ export default function Footer() {
 
       {/* ——— Контент ——— */}
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-16 pt-10 md:pt-16">
-        {/* Карточка-контейнер с мягким стеклом — особенно читабельно на телефоне */}
         <div className="rounded-3xl bg-white/[0.04] ring-1 ring-white/10 backdrop-blur-xl shadow-[0_30px_120px_-40px_rgba(0,0,0,.7)] overflow-hidden">
-          {/* Верх: короткий слоган + CTA для мобилы */}
+          {/* Верх: короткий слоган + CTA */}
           <div className="px-6 py-6 md:px-12 md:py-10 border-b border-white/10">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
@@ -181,7 +177,7 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* ——— Стили: фон, сетка, ссылки, анимации ——— */}
+      {/* ——— Стили: фон, ссылки ——— */}
       <style>{`
         .link {
           color: #fff;
@@ -203,87 +199,144 @@ export default function Footer() {
   );
 }
 
-/* ——— Верхняя «шапка»-переход к белому блоку + волна ——— */
-function TopBlendCap() {
-  return (
-    <>
-      {/* Мягкий белый градиент вниз: убирает резкий стык с белым блоком выше */}
-      <div className="pointer-events-none absolute -top-10 left-0 right-0 h-12 bg-gradient-to-b from-white to-transparent z-10" />
-      {/* Волнистая крышка (лежит под градиентом) */}
-      <svg
-        className="pointer-events-none absolute -top-[1px] left-0 w-full h-12 text-[#0a0a0a] z-0"
-        viewBox="0 0 1440 80"
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        <path
-          fill="currentColor"
-          d="M0,32 C120,64 240,0 360,16 C480,32 600,80 720,72 C840,64 960,8 1080,8 C1200,8 1320,56 1440,56 L1440,0 L0,0 Z"
-        />
-      </svg>
-    </>
-  );
-}
-
 /* ——— Интерактивный фон: созвездие с линиями (canvas), ч/б ——— */
 function TechConstellation({ reduced }: { reduced: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
-  const pointsRef = useRef<Array<{ x: number; y: number; vx: number; vy: number }>>([]);
+  const pointsRef = useRef<Point[]>([]);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const runningRef = useRef<boolean>(false);
+  const ioRef = useRef<IntersectionObserver | null>(null);
+  const lastTsRef = useRef<number>(0);
+
+  const isMobile =
+    typeof window !== "undefined" &&
+    (window.matchMedia?.("(max-width: 768px)")?.matches ||
+      /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
 
   useEffect(() => {
     const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
-    let dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const ctx = canvas.getContext("2d", { alpha: true })!;
+    const targetDpr = Math.max(1, Math.min(isMobile ? 1.5 : 2, window.devicePixelRatio || 1));
 
     const resize = () => {
-      const { clientWidth, clientHeight } = canvas.parentElement!;
-      canvas.width = Math.floor(clientWidth * dpr);
-      canvas.height = Math.floor(clientHeight * dpr);
-      canvas.style.width = `${clientWidth}px`;
-      canvas.style.height = `${clientHeight}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Берём реальный прямоугольник родителя — так надёжнее на мобиле
+      const parent = canvas.parentElement!;
+      const rect = parent.getBoundingClientRect();
+      const cw = Math.max(1, Math.floor(rect.width));
+      const ch = Math.max(1, Math.floor(rect.height));
+      canvas.width = Math.floor(cw * targetDpr);
+      canvas.height = Math.floor(ch * targetDpr);
+      canvas.style.width = `${cw}px`;
+      canvas.style.height = `${ch}px`;
+      ctx.setTransform(targetDpr, 0, 0, targetDpr, 0, 0);
 
-      // количество точек под размер экрана
-      const base = Math.round((clientWidth * clientHeight) / 26000);
+      // Плотность точек под площадь (как было)
+      const base = Math.round((cw * ch) / 26000);
       const count = Math.max(18, Math.min(60, base));
-      pointsRef.current = makePoints(count, clientWidth, clientHeight, reduced);
+      pointsRef.current = makePoints(count, cw, ch, reduced);
     };
 
+    // pointer
     const onPointerMove = (e: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      pointerRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const r = canvas.getBoundingClientRect();
+      pointerRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
     };
     const onPointerLeave = () => (pointerRef.current = null);
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      const r = canvas.getBoundingClientRect();
+      pointerRef.current = { x: t.clientX - r.left, y: t.clientY - r.top };
+    };
+    const onTouchEnd = () => (pointerRef.current = null);
+
+    // throttle resize
+    let resizeRaf = 0;
+    const onResize = () => {
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(resize);
+    };
 
     resize();
-    window.addEventListener("resize", resize);
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerleave", onPointerLeave);
-    canvas.addEventListener("touchstart", (e) => {
-      if (e.touches[0]) {
-        const rect = canvas.getBoundingClientRect();
-        pointerRef.current = {
-          x: e.touches[0].clientX - rect.left,
-          y: e.touches[0].clientY - rect.top,
-        };
-      }
-    }, { passive: true });
-    canvas.addEventListener("touchend", () => (pointerRef.current = null));
+    window.addEventListener("resize", onResize, { passive: true });
+    canvas.addEventListener("pointermove", onPointerMove, { passive: true });
+    canvas.addEventListener("pointerleave", onPointerLeave, { passive: true });
+    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: true });
 
-    const loop = () => {
-      drawFrame(ctx, canvas, pointsRef.current, pointerRef.current, reduced);
+    // главный цикл с адаптивным FPS
+    const maxFps = reduced ? 30 : isMobile ? 36 : 60;
+    const frameInterval = 1000 / maxFps;
+
+    const loop = (ts: number) => {
+      if (!runningRef.current) return;
+      const last = lastTsRef.current || ts;
+      if (ts - last >= frameInterval) {
+        drawFrame(ctx, canvas, pointsRef.current, pointerRef.current, reduced, targetDpr);
+        lastTsRef.current = ts;
+      }
       rafRef.current = requestAnimationFrame(loop);
     };
-    loop();
+
+    // ВАЖНО: наблюдаем не за canvas (absolute, z-index < 0), а за его РОДИТЕЛЕМ (footer)
+    const target = canvas.parentElement!;
+    ioRef.current = new IntersectionObserver(
+      (entries) => {
+        const visible = entries[0]?.isIntersecting ?? false;
+        if (visible && !document.hidden) {
+          runningRef.current = true;
+          lastTsRef.current = 0;
+          if (!rafRef.current) rafRef.current = requestAnimationFrame(loop);
+        } else {
+          runningRef.current = false;
+          if (rafRef.current) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+          }
+        }
+      },
+      {
+        root: null,
+        threshold: 0.01,
+        // небольшой запас, чтобы стартовать раньше, чем блок попадёт в видимую область
+        rootMargin: "200px 0px",
+      }
+    );
+    ioRef.current.observe(target);
+
+    // Пауза при скрытии вкладки
+    const onVisibility = () => {
+      const shouldRun = !document.hidden;
+      if (shouldRun) {
+        lastTsRef.current = 0;
+        runningRef.current = true;
+        if (!rafRef.current) rafRef.current = requestAnimationFrame(loop);
+      } else {
+        runningRef.current = false;
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    // fallback: если IO ещё не успел сработать, но блок уже виден — стартуем
+    runningRef.current = true;
+    if (!rafRef.current) rafRef.current = requestAnimationFrame(loop);
 
     return () => {
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", onResize);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerleave", onPointerLeave);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("visibilitychange", onVisibility);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      ioRef.current?.disconnect();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced]);
 
   return (
@@ -299,7 +352,7 @@ function TechConstellation({ reduced }: { reduced: boolean }) {
 type Point = { x: number; y: number; vx: number; vy: number };
 
 function makePoints(n: number, w: number, h: number, reduced: boolean): Point[] {
-  const pts: Point[] = [];               // <-- ключевая строка
+  const pts: Point[] = [];
   for (let i = 0; i < n; i++) {
     const x = Math.random() * w;
     const y = Math.random() * h;
@@ -310,21 +363,29 @@ function makePoints(n: number, w: number, h: number, reduced: boolean): Point[] 
   return pts;
 }
 
+/** ВАЖНО: размеры берём из canvas.width/height, НО делим на DPR — так координаты верные */
 function drawFrame(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
-  points: Point[],                                // <-- здесь тоже
+  points: Point[],
   pointer: { x: number; y: number } | null,
-  reduced: boolean
+  reduced: boolean,
+  dpr: number
 ) {
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
+  const w = canvas.width / dpr;
+  const h = canvas.height / dpr;
 
-  // очистка с лёгким затуханием для «шелка»
-  ctx.fillStyle = "rgba(10,10,10,0.9)";
-  ctx.fillRect(0, 0, w, h);
+  // фон (как раньше)
+  if (reduced) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "rgba(10,10,10,1)";
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    ctx.fillStyle = "rgba(10,10,10,0.9)";
+    ctx.fillRect(0, 0, w, h);
+  }
 
-  // обновление позиций
+  // движение
   if (!reduced) {
     for (const p of points) {
       p.x += p.vx;
@@ -336,30 +397,68 @@ function drawFrame(
     }
   }
 
-  // соединяем близкие точки
+  // параметры связей
   const maxDist = Math.min(140, Math.max(100, Math.min(w, h) * 0.18));
+  const maxDist2 = maxDist * maxDist;
+
+  // простая локальная сетка (оптимизация), но БЕЗ риска «пропасть»
+  const cell = Math.max(32, maxDist);
+  const cols = Math.max(1, Math.ceil(w / cell));
+  const rows = Math.max(1, Math.ceil(h / cell));
+  const grid: number[][] = Array(cols * rows);
+  for (let i = 0; i < grid.length; i++) grid[i] = [];
+
+  const cellIndex = (x: number, y: number) => {
+    const cx = Math.min(cols - 1, Math.max(0, Math.floor(x / cell)));
+    const cy = Math.min(rows - 1, Math.max(0, Math.floor(y / cell)));
+    return cy * cols + cx;
+  };
+
   for (let i = 0; i < points.length; i++) {
-    const p1 = points[i];
-    for (let j = i + 1; j < points.length; j++) {
-      const p2 = points[j];
-      const dx = p1.x - p2.x;
-      const dy = p1.y - p2.y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < maxDist * maxDist) {
-        // ближе к указателю — ярче
-        let alpha = 0.15 * (1 - Math.sqrt(d2) / maxDist);
-        if (pointer) {
-          const ddx = ((p1.x + p2.x) * 0.5) - pointer.x;
-          const ddy = ((p1.y + p2.y) * 0.5) - pointer.y;
-          const pd = Math.sqrt(ddx * ddx + ddy * ddy);
-          alpha += Math.max(0, 0.35 - pd / 500);
+    const p = points[i];
+    grid[cellIndex(p.x, p.y)].push(i);
+  }
+
+  // линии
+  ctx.lineWidth = 1;
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < cols; cx++) {
+      const locals: number[] = [];
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const nx = cx + ox, ny = cy + oy;
+          if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+          const arr = grid[ny * cols + nx];
+          if (arr && arr.length) locals.push(...arr);
         }
-        ctx.strokeStyle = `rgba(255,255,255,${Math.min(0.45, Math.max(0.04, alpha))})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
+      }
+      for (let i = 0; i < locals.length; i++) {
+        const p1 = points[locals[i]];
+        for (let j = i + 1; j < locals.length; j++) {
+          const p2 = points[locals[j]];
+          const dx = p1.x - p2.x;
+          const dy = p1.y - p2.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < maxDist2) {
+            let alpha = 0.15 * (1 - Math.sqrt(d2) / maxDist);
+            if (pointer) {
+              const mx = (p1.x + p2.x) * 0.5;
+              const my = (p1.y + p2.y) * 0.5;
+              const ddx = mx - pointer.x;
+              const ddy = my - pointer.y;
+              const pd = Math.sqrt(ddx * ddx + ddy * ddy);
+              alpha += Math.max(0, 0.35 - pd / 500);
+            }
+            const a = Math.min(0.45, Math.max(0.04, alpha));
+            if (a > 0.01) {
+              ctx.strokeStyle = `rgba(255,255,255,${a})`;
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.stroke();
+            }
+          }
+        }
       }
     }
   }
