@@ -1,17 +1,15 @@
-// components/ContactSection.tsx
 "use client";
 
 import ContactForm from "@/components/ContactForm";
 import { motion, useReducedMotion } from "framer-motion";
 import React from "react";
 
-/* ===== Константы вне рендера ===== */
 const EASE = [0.4, 0, 0.2, 1] as const;
+
 const VIEWPORT_06_ONCE = { amount: 0.6, once: true } as const;
 const VIEWPORT_055_ONCE = { amount: 0.55, once: true } as const;
 const CHIPS = ["Next.js", "React", "Интеграции", "Безопасность", "Поддержка"] as const;
 
-/* Статические локальные стили (styled-jsx) */
 const BG_CSS = `
   .aurora { position:absolute; filter:blur(80px); opacity:.42; mix-blend-mode:multiply; }
   .a1 { width:36rem; height:36rem; right:-8rem; top:-6rem;
@@ -37,24 +35,18 @@ const BG_CSS = `
   }
   @keyframes gridShift{from{transform:translate3d(0,0,0)}to{transform:translate3d(-22px,-22px,0)}}
 
-  /* Отключение анимаций через класс .reduced — без динамического CSS */
   .reduced .a1, .reduced .a2, .reduced .a3, .reduced .gridlines { animation: none !important; }
-
-  /* Также уважаем системную настройку */
   @media (prefers-reduced-motion: reduce) {
     .a1, .a2, .a3, .gridlines { animation: none !important; }
   }
 `;
 
-/* ===== Фон секции: аврора + сетка под контентом (pure) ===== */
 const ContactBackground = React.memo(function ContactBackground({ reduced }: { reduced: boolean }) {
   return (
     <>
-      {/* «шторы» для мягких стыков */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white to-transparent z-0" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent z-0" />
 
-      {/* аврора + сетка */}
       <div className={`pointer-events-none absolute inset-0 -z-10 ${reduced ? "reduced" : ""}`}>
         <div className="absolute -top-16 -left-24 h-[26rem] w-[26rem] rounded-full bg-black/[0.04] blur-3xl" />
         <div className="aurora a1" />
@@ -68,7 +60,6 @@ const ContactBackground = React.memo(function ContactBackground({ reduced }: { r
   );
 });
 
-/* ===== Основная секция ===== */
 export default function ContactSection() {
   const reduced = useReducedMotion();
 
@@ -78,7 +69,6 @@ export default function ContactSection() {
 
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 py-20 md:py-28">
         <div className="grid gap-10 md:gap-16 md:grid-cols-2 items-center">
-          {/* Левый блок */}
           <div>
             <motion.h2
               className="text-4xl md:text-5xl font-semibold tracking-tight"
@@ -101,12 +91,11 @@ export default function ContactSection() {
               Минимум формальностей, максимум пользы.
             </motion.p>
 
-            {/* Бейджи */}
             <div className="mt-6 flex flex-wrap gap-2">
               {CHIPS.map((t, i) => (
                 <motion.span
                   key={t}
-                  className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm"
+                  className="rounded-full bg白/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm"
                   initial={{ opacity: 0, y: 8 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={VIEWPORT_06_ONCE}
@@ -118,7 +107,6 @@ export default function ContactSection() {
               ))}
             </div>
 
-            {/* Быстрые контакты */}
             <div className="mt-8 grid grid-cols-2 gap-3 max-w-sm">
               <a
                 href="https://t.me/+fnL2WMHosstjY2Qy"
@@ -144,7 +132,6 @@ export default function ContactSection() {
             </div>
           </div>
 
-          {/* Правая стеклянная карточка с формой */}
           <motion.div
             className="relative rounded-3xl bg-white/70 backdrop-blur-xl ring-1 ring-black/10 shadow-[0_20px_6px_-20px_rgba(0,0,0,.25)] p-5 md:p-8"
             initial={{ opacity: 0, y: 16, scale: 0.98 }}

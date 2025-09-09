@@ -1,54 +1,21 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import Image from "next/image";
 import { motion, useMotionValue, useSpring, useReducedMotion } from "framer-motion";
 import OrbitRings from "@/components/OrbitRings";
 
-/** ====== CONSTS OUTSIDE RENDER ====== */
-const CHIPS = ["Next.js", "React", "Node.js", "Безопасность", "Интеграции"] as const;
-const EASE_IO = [0.4, 0.0, 0.2, 1] as const;
-const EASE_LIN = [0, 0, 1, 1] as const;
-// ключевые кадры вынесены, чтобы не создавать новые массивы на каждом рендере
-const D1_KEYFRAMES = [
-  "M 0 520 C 220 540 340 380 600 420 C 860 460 980 320 1200 340 L 1200 800 L 0 800 Z",
-  "M 0 520 C 200 420 380 540 600 500 C 820 460 1000 380 1200 460 L 1200 800 L 0 800 Z",
-  "M 0 520 C 220 540 340 380 600 420 C 860 460 980 320 1200 340 L 1200 800 L 0 800 Z",
-] as const;
+const EASE_IO = [0.4, 0, 0.2, 1] as const;
 
-const D2_KEYFRAMES = [
-  "M 0 300 C 180 260 420 360 600 320 C 780 280 980 220 1200 260 L 1200 800 L 0 800 Z",
-  "M 0 300 C 240 360 420 220 600 280 C 780 340 980 300 1200 260 L 1200 800 L 0 800 Z",
-  "M 0 300 C 180 260 420 360 600 320 C 780 280 980 220 1200 260 L 1200 800 L 0 800 Z",
-] as const;
-
-/** ===================== SVG BACKGROUND ===================== **/
-const AuroraSVG = React.memo(function AuroraSVG({
+/** ===================== SVG BACKGROUND (легкий) ===================== **/
+function AuroraSVG({
   tiltX,
   tiltY,
   reduced,
-}: {
-  tiltX: number;
-  tiltY: number;
-  reduced: boolean;
-}) {
-  // мемоизация матриц трансформации
-  const tx = useMemo(() => `translate3d(${tiltX * 2}px, ${tiltY * 2}px, 0)`, [tiltX, tiltY]);
-  const tx2 = useMemo(() => `translate3d(${tiltX * -1.5}px, ${tiltY * -1.5}px, 0)`, [tiltX, tiltY]);
-  const tx3 = useMemo(() => `translate3d(${tiltX * 0.8}px, ${tiltY * 0.8}px, 0)`, [tiltX, tiltY]);
-
-  // сетка и частицы — статические координаты, готовим один раз
-  const gridV = useMemo(() => Array.from({ length: 16 }, (_, i) => (i * 1200) / 15), []);
-  const gridH = useMemo(() => Array.from({ length: 10 }, (_, i) => (i * 800) / 9), []);
-  const particles = useMemo(
-    () =>
-      Array.from({ length: 24 }, (_, i) => ({
-        cx: ((i * 97) % 1200) + 10,
-        cy: ((i * 173) % 800) + 10,
-        delay: (i % 12) * 0.6,
-      })),
-    []
-  );
+}: { tiltX: number; tiltY: number; reduced: boolean }) {
+  const tx = `translate3d(${tiltX * 2}px, ${tiltY * 2}px, 0)`;
+  const tx2 = `translate3d(${tiltX * -1.2}px, ${tiltY * -1.2}px, 0)`;
+  const tx3 = `translate3d(${tiltX * 0.6}px, ${tiltY * 0.6}px, 0)`;
 
   return (
     <svg
@@ -74,46 +41,35 @@ const AuroraSVG = React.memo(function AuroraSVG({
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
 
+        {/* blur подешевле */}
         <filter id="softBlur">
-          <feGaussianBlur stdDeviation="30" edgeMode="duplicate" />
-        </filter>
-
-        <filter id="grain">
-          <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="1" stitchTiles="stitch" />
-          <feColorMatrix type="saturate" values="0" />
-          <feComponentTransfer>
-            <feFuncA type="table" tableValues="0 0.04" />
-          </feComponentTransfer>
+          <feGaussianBlur stdDeviation="12" edgeMode="duplicate" />
         </filter>
       </defs>
 
-      {/* Слой 1 */}
+      {/* Лёгкие «пятна» без морфинга d */}
       <g style={{ transform: tx }}>
         <motion.path
-          initial={false}
-          animate={reduced ? {} : { d: D1_KEYFRAMES as unknown as string[] }}
+          initial={{ opacity: 0.6 }}
+          animate={reduced ? {} : { opacity: [0.55, 0.7, 0.55], scale: [1, 1.03, 1] }}
           transition={{ duration: 16, repeat: Infinity, ease: EASE_IO }}
-          d={D1_KEYFRAMES[0]}
+          d="M 0 520 C 220 540 340 380 600 420 C 860 460 980 320 1200 340 L 1200 800 L 0 800 Z"
           fill="url(#g1)"
           filter="url(#softBlur)"
-          opacity="0.65"
         />
       </g>
 
-      {/* Слой 2 */}
       <g style={{ transform: tx2 }}>
         <motion.path
-          initial={false}
-          animate={reduced ? {} : { d: D2_KEYFRAMES as unknown as string[] }}
-          transition={{ duration: 20, repeat: Infinity, ease: EASE_IO }}
-          d={D2_KEYFRAMES[0]}
+          initial={{ opacity: 0.45 }}
+          animate={reduced ? {} : { opacity: [0.4, 0.55, 0.4], scale: [1, 1.02, 1] }}
+          transition={{ duration: 18, repeat: Infinity, ease: EASE_IO }}
+          d="M 0 300 C 180 260 420 360 600 320 C 780 280 980 220 1200 260 L 1200 800 L 0 800 Z"
           fill="url(#g2)"
           filter="url(#softBlur)"
-          opacity="0.5"
         />
       </g>
 
-      {/* Слой 3 */}
       <g style={{ transform: tx3 }}>
         <motion.circle
           cx="900"
@@ -121,115 +77,68 @@ const AuroraSVG = React.memo(function AuroraSVG({
           r="280"
           fill="url(#g3)"
           filter="url(#softBlur)"
-          initial={{ scale: 0.95 }}
-          animate={reduced ? {} : { scale: [0.95, 1.02, 0.95] }}
+          initial={{ scale: 0.97, opacity: 0.6 }}
+          animate={reduced ? {} : { scale: [0.97, 1.02, 0.97], opacity: [0.55, 0.65, 0.55] }}
           transition={{ duration: 14, repeat: Infinity, ease: EASE_IO }}
-          opacity="0.6"
         />
       </g>
 
-      {/* Сетка */}
+      {/* Статичная сетка (без анимации штрихов) — сильно дешевле */}
       <g stroke="rgba(0,0,0,0.05)" strokeWidth="1">
-        {gridV.map((x, i) => (
-          <motion.path
-            key={`v-${i}`}
-            d={`M ${x} 0 L ${x} 800`}
-            strokeDasharray="100 100"
-            initial={{ strokeDashoffset: 0, opacity: 0.8 }}
-            animate={reduced ? { opacity: 0.5 } : { strokeDashoffset: [0, 100, 0], opacity: 0.5 }}
-            transition={{ duration: 18, repeat: Infinity, ease: EASE_LIN }}
-          />
-        ))}
-        {gridH.map((y, i) => (
-          <motion.path
-            key={`h-${i}`}
-            d={`M 0 ${y} L 1200 ${y}`}
-            strokeDasharray="100 100"
-            initial={{ strokeDashoffset: 0, opacity: 0.8 }}
-            animate={reduced ? { opacity: 0.5 } : { strokeDashoffset: [0, 100, 0], opacity: 0.5 }}
-            transition={{ duration: 18, repeat: Infinity, ease: EASE_LIN }}
-          />
-        ))}
+        {Array.from({ length: 10 }).map((_, i) => {
+          const x = (i * 1200) / 9;
+          return <path key={`v-${i}`} d={`M ${x} 0 L ${x} 800`} />;
+        })}
+        {Array.from({ length: 6 }).map((_, i) => {
+          const y = (i * 800) / 5;
+          return <path key={`h-${i}`} d={`M 0 ${y} L 1200 ${y}`} />;
+        })}
       </g>
-
-      {/* Частицы */}
-      <g>
-        {particles.map(({ cx, cy, delay }, i) => (
-          <motion.circle
-            key={i}
-            cx={cx}
-            cy={cy}
-            r="1.6"
-            fill="rgba(0,0,0,0.12)"
-            initial={{ opacity: 0.2, y: 0 }}
-            animate={reduced ? {} : { opacity: [0.2, 0.6, 0.2], y: [-6, 4, -6] }}
-            transition={{ type: "tween", duration: 10, repeat: Infinity, ease: EASE_IO, delay }}
-          />
-        ))}
-      </g>
-
-      <rect x="0" y="0" width="1200" height="800" filter="url(#grain)" />
     </svg>
   );
-});
+}
 
 /** ===================== MAIN HERO ===================== **/
 export default function HeroSection() {
-  const [scrolled, setScrolled] = useState(false);
   const prefersReduced = useReducedMotion();
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 16);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
+  // Параллакс по курсору — дешёвый transform-only
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
   const tiltX = useSpring(mx, { stiffness: 80, damping: 15, mass: 0.3 });
   const tiltY = useSpring(my, { stiffness: 80, damping: 15, mass: 0.3 });
 
-  // стабильная ссылка на обработчик (меньше перерисовок из-за замыканий)
-  const onMouseMove = useCallback((e: React.MouseEvent) => {
-    const { innerWidth, innerHeight } = window;
-    mx.set((e.clientX / innerWidth - 0.5) * 10);
-    my.set((e.clientY / innerHeight - 0.5) * -10);
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const { innerWidth, innerHeight } = window;
+      mx.set((e.clientX / innerWidth - 0.5) * 10);
+      my.set((e.clientY / innerHeight - 0.5) * -10);
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => window.removeEventListener("mousemove", onMove);
   }, [mx, my]);
 
-  // читаем один раз за рендер
-  const tX = tiltX.get() || 0;
-  const tY = tiltY.get() || 0;
-
-  const glareL = useMemo(
-    () => ({ transform: `translate3d(${tX * 2}px, ${tY * 2}px, 0)` }),
-    [tX, tY]
-  );
-  const glareR = useMemo(
-    () => ({ transform: `translate3d(${tX * -2}px, ${tY * -2}px, 0)` }),
-    [tX, tY]
-  );
+  const chips = ["Next.js", "React", "Node.js", "Безопасность", "Интеграции"];
 
   return (
     <section
       id="top"
       aria-label="Hero"
-      onMouseMove={onMouseMove}
       className="relative isolate min-h-[100svh] w-full overflow-hidden bg-white"
     >
       <OrbitRings />
-      <AuroraSVG tiltX={tX} tiltY={tY} reduced={!!prefersReduced} />
+      <AuroraSVG tiltX={tiltX.get() || 0} tiltY={tiltY.get() || 0} reduced={!!prefersReduced} />
 
       {/* Блики */}
       <div
         aria-hidden
         className="absolute -left-40 -top-40 h-[420px] w-[420px] rounded-full bg-white/30 blur-3xl -z-10"
-        style={glareL}
+        style={{ transform: `translate3d(${(tiltX.get() || 0) * 2}px, ${(tiltY.get() || 0) * 2}px, 0)` }}
       />
       <div
         aria-hidden
         className="absolute -right-40 top-1/3 h-[360px] w-[360px] rounded-full bg-neutral-100/60 blur-2xl -z-10"
-        style={glareR}
+        style={{ transform: `translate3d(${(tiltX.get() || 0) * -2}px, ${(tiltY.get() || 0) * -2}px, 0)` }}
       />
 
       {/* Контент */}
@@ -237,10 +146,7 @@ export default function HeroSection() {
         <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
           <div className="flex justify-center md:justify-end">
             <motion.div
-              className="relative w-56 h-56 sm:w-64 sm:h-64 md:w-80 md:h-80
-                         rounded-3xl backdrop-blur-xl bg-white/60 ring-1 ring-black/5
-                         shadow-[0_15px_60px_-15px_rgba(0,0,0,0.25)]
-                         will-change-transform"
+              className="relative w-56 h-56 sm:w-64 sm:h-64 md:w-80 md:h-80 rounded-3xl backdrop-blur-xl bg-white/60 ring-1 ring-black/5 shadow-[0_15px_60px_-15px_rgba(0,0,0,0.25)] will-change-transform"
               style={{ transformStyle: "preserve-3d", rotateX: tiltY, rotateY: tiltX }}
               whileHover={prefersReduced ? {} : { scale: 1.02 }}
               transition={{ type: "spring", stiffness: 120, damping: 12 }}
@@ -277,23 +183,15 @@ export default function HeroSection() {
             </motion.ul>
 
             <div className="mt-6 flex flex-wrap gap-2 justify-center md:justify-start">
-              {CHIPS.map((t, i) => (
+              {chips.map((t, i) => (
                 <motion.span
                   key={t}
-                  className="rounded-full px-3 py-1 text-xs md:text-sm text-neutral-700
-                             bg-white/70 backdrop-blur-md ring-1 ring-black/10 shadow-sm"
+                  className="rounded-full px-3 py-1 text-xs md:text-sm text-neutral-700 bg-white/70 backdrop-blur-md ring-1 ring-black/10 shadow-sm"
                   initial={{ opacity: 0, y: 8 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.6 }}
-                  animate={prefersReduced ? {} : { y: [0, -2] }}
-                  transition={{
-                    delay: 0.2 * i,
-                    type: "spring",
-                    stiffness: 120,
-                    damping: 16,
-                    repeat: Infinity,
-                    repeatType: "mirror",
-                  }}
+                  animate={prefersReduced ? {} : { y: [0, -2, 0] }}
+                  transition={{ duration: 2, ease: EASE_IO, repeat: Infinity, delay: 0.2 * i }}
                   style={{ willChange: "transform" }}
                 >
                   {t}
@@ -304,12 +202,8 @@ export default function HeroSection() {
         </div>
       </div>
 
-      {/* Стрелка */}
-      <div
-        className={`pointer-events-none absolute inset-x-0 bottom-6 flex justify-center transition-opacity duration-300 ${
-          scrolled ? "opacity-0" : "opacity-100"
-        }`}
-      >
+      {/* Стрелка (без state на scroll) */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center">
         <motion.svg
           xmlns="http://www.w3.org/2000/svg"
           className="w-8 h-8 text-neutral-400"
@@ -317,7 +211,7 @@ export default function HeroSection() {
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth={2}
-          initial={{ y: 0 }}
+          initial={false}
           animate={prefersReduced ? {} : { y: [0, 6, 0] }}
           transition={{ type: "tween", duration: 1.6, repeat: Infinity, ease: EASE_IO }}
         >
