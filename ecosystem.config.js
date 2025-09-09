@@ -9,8 +9,10 @@ module.exports = {
       env: { NODE_ENV: "production", PORT: "3000" },
       instances: 1,      // можно увеличить/перейти в cluster после
       autorestart: true,
-      max_restarts: 10,
+      exec_mode: "fork",
+      instances: 1,
       watch: false,
+      max_restarts: 10,
       out_file: "logs/out.log",
       error_file: "logs/err.log",
       time: true
