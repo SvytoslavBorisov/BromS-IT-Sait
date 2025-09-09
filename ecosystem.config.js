@@ -9,7 +9,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: "3000",
-        NODE_OPTIONS: "--max-old-space-size=512"
+        NODE_OPTIONS: "--max-old-space-size=512 --initial-old-space-size=256"
       },
       instances: 1,      // можно увеличить/перейти в cluster после
       autorestart: true,
