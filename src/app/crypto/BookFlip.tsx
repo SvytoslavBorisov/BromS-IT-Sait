@@ -1,22 +1,22 @@
+// src/app/crypto/BookFlip.tsx
 "use client";
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import dynamic from "next/dynamic";
-import { animate } from "framer-motion";
+import MainPageClient from "./MainPageClient";
+import CryptoLandingClient from "./CryptoLandingClient";
 
-const EASE = [0.26, 0.08, 0.25, 1] as const;
 type Dir = "toBlack" | "toWhite" | null;
 
-// ✅ Ленивая загрузка: каждая страница грузится только когда реально нужна
-const MainPageClient = dynamic(() => import("./MainPageClient"), { ssr: false });
-const CryptoLandingClient = dynamic(() => import("./CryptoLandingClient"), { ssr: false });
+const EASE = "cubic-bezier(0.26, 0.08, 0.25, 1)";
+const DURATION_MS = 700;
 
 export default function BookFlip() {
   const router = useRouter();
   const search = useSearchParams();
 
-  const initialFlipped = search?.get("page") === "black"; // true => чёрный активен
+  // начальное состояние из URL
+  const initialFlipped = search?.get("page") === "black";
   const [flipped, setFlipped] = useState<boolean>(initialFlipped);
   const [animDir, setAnimDir] = useState<Dir>(null);
 
@@ -24,95 +24,149 @@ export default function BookFlip() {
   const whiteRef = useRef<HTMLDivElement | null>(null);
   const blackRef = useRef<HTMLDivElement | null>(null);
 
-  // --- вычисления высоты без React-стейтов (чтобы не триггерить ререндер) ---
-  const measureHeights = () => {
+  const isAnimatingRef = useRef(false);
+  const lastWhiteHRef  = useRef(0);
+  const lastBlackHRef  = useRef(0);
+  const rafMeasureRef  = useRef<number | null>(null);
+
+  // detect reduced motion once
+  const reducedMotion = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+  }, []);
+
+  const setVars = useCallback((vars: Record<string, string>) => {
     if (!rootRef.current) return;
+    const s = rootRef.current.style;
+    for (const [k, v] of Object.entries(vars)) s.setProperty(k, v);
+  }, []);
+
+  // Единая функция замера и применения высот
+  const measureHeights = useCallback(() => {
+    if (!rootRef.current) return;
+
     const vp = typeof window !== "undefined" ? window.innerHeight : 0;
-    const w = whiteRef.current?.scrollHeight ?? 0;
-    const b = blackRef.current?.scrollHeight ?? 0;
+    const w  = whiteRef.current?.scrollHeight ?? 0;
+    const b  = blackRef.current?.scrollHeight ?? 0;
 
-    const r = rootRef.current.style;
-    r.setProperty("--hWhite", `${Math.max(w, vp)}px`);
-    r.setProperty("--hBlack", `${Math.max(b, vp)}px`);
+    const wTarget = Math.max(w, vp);
+    const bTarget = Math.max(b, vp);
 
-    // при первом заходе/после быстрой загрузки — синхронизируем финальные значения
-    if (!animDir) {
+    const changed = (wTarget !== lastWhiteHRef.current) || (bTarget !== lastBlackHRef.current);
+    if (!changed) return;
+
+    lastWhiteHRef.current = wTarget;
+    lastBlackHRef.current = bTarget;
+
+    setVars({
+      "--hWhite": `${wTarget}px`,
+      "--hBlack": `${bTarget}px`,
+    });
+
+    if (!isAnimatingRef.current) {
+      // держим консистентность from/to под активную страницу
       const active = flipped ? "var(--hBlack)" : "var(--hWhite)";
-      r.setProperty("--hFrom", active);
-      r.setProperty("--hTo", active);
-      r.setProperty("--cut", flipped ? "100%" : "0%");
-      r.setProperty("--t", flipped ? "1" : "0");
+      setVars({
+        "--hFrom": active,
+        "--hTo": active,
+      });
     }
-  };
+  }, [flipped, setVars]);
 
-  // ✅ Один раз вешаем ResizeObserver + resize, без завязки на анимацию/флип
-  useLayoutEffect(() => {
-    const ro = new ResizeObserver(() => requestAnimationFrame(measureHeights));
+  const scheduleMeasure = useCallback(() => {
+    if (rafMeasureRef.current != null) return;
+    rafMeasureRef.current = requestAnimationFrame(() => {
+      rafMeasureRef.current = null;
+      measureHeights();
+    });
+  }, [measureHeights]);
+
+  // Инициализация и observers
+  useEffect(() => {
+    scheduleMeasure();
+
+    const ro = new ResizeObserver(() => scheduleMeasure());
     if (whiteRef.current) ro.observe(whiteRef.current);
     if (blackRef.current) ro.observe(blackRef.current);
 
-    const onResize = () => requestAnimationFrame(measureHeights);
+    const onResize = () => scheduleMeasure();
     window.addEventListener("resize", onResize, { passive: true });
-
-    // первая инициализация
-    requestAnimationFrame(measureHeights);
 
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", onResize);
+      if (rafMeasureRef.current) cancelAnimationFrame(rafMeasureRef.current);
+      rafMeasureRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [scheduleMeasure]);
 
-  // ✅ Обновляем query без автоскролла
+  // Синхронизация URL <-> состояние
   useEffect(() => {
     const desired = flipped ? "black" : "white";
     const current = search?.get("page") ?? "white";
-    if (current !== desired) router.replace(`?page=${desired}`, { scroll: false });
+    if (current !== desired) {
+      router.replace(`?page=${desired}`, { scroll: false });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flipped]);
 
-  // --- запуск анимации перелистывания ---
-  const startFlip = (to: "black" | "white") => {
+  const finishFlip = useCallback((to: "black" | "white") => {
+    setFlipped(to === "black");
+    setAnimDir(null);
+    isAnimatingRef.current = false;
+
+    // фиксируем конечные значения
+    const targetVar = to === "black" ? "var(--hBlack)" : "var(--hWhite)";
+    setVars({
+      "--hFrom": targetVar,
+      "--hTo": targetVar,
+      "--cut":   to === "black" ? "100%" : "0%",
+      "--t":     to === "black" ? "1" : "0",
+    });
+  }, [setVars]);
+
+  const startFlip = useCallback((to: "black" | "white") => {
     if (!rootRef.current) return;
-    const r = rootRef.current.style;
-    const fromCut = to === "black" ? 0 : 100;
-    const toCut   = to === "black" ? 100 : 0;
+    if (isAnimatingRef.current) return;
 
-    // анимации потребуются обе высоты — заранее измерим
-    requestAnimationFrame(measureHeights);
-
-    r.setProperty("--hFrom", to === "black" ? "var(--hWhite)" : "var(--hBlack)");
-    r.setProperty("--hTo",   to === "black" ? "var(--hBlack)" : "var(--hWhite)");
+    isAnimatingRef.current = true;
     setAnimDir(to === "black" ? "toBlack" : "toWhite");
 
-    const controls = animate(fromCut, toCut, {
-      duration: 0.7,
-      ease: EASE as any,
-      onUpdate: (v) => {
-        r.setProperty("--cut", `${v}%`);
-        r.setProperty("--t", String(v / 100));
-      },
-      onComplete: () => {
-        setFlipped(to === "black");
-        setAnimDir(null);
-
-        // финализация переменных
-        const targetVar = to === "black" ? "var(--hBlack)" : "var(--hWhite)";
-        r.setProperty("--hFrom", targetVar);
-        r.setProperty("--hTo",   targetVar);
-        r.setProperty("--cut",   to === "black" ? "100%" : "0%");
-        r.setProperty("--t",     to === "black" ? "1" : "0");
-      },
+    // подготавливаем from/to высоты
+    setVars({
+      "--hFrom": to === "black" ? "var(--hWhite)" : "var(--hBlack)",
+      "--hTo":   to === "black" ? "var(--hBlack)" : "var(--hWhite)",
     });
 
-    return () => controls.stop();
-  };
+    if (reducedMotion) {
+      // без анимации — мгновенно
+      finishFlip(to);
+      return;
+    }
 
-  const peelForward = () => startFlip("black"); // белый → чёрный (угол top-right)
-  const peelBack    = () => startFlip("white"); // чёрный → белый (угол top-left)
+    // триггерим CSS-переходы по custom properties
+    requestAnimationFrame(() => {
+      setVars({
+        "--cut": to === "black" ? "100%" : "0%",
+        "--t":   to === "black" ? "1" : "0",
+      });
 
-  // --- маска всегда на белой странице (верхней) ---
+      // ждём конец transition (вешаем на root)
+      const el = rootRef.current!;
+      const onEnd = (e: TransitionEvent) => {
+        if (e.target !== el) return;
+        if (e.propertyName !== "--t" && e.propertyName !== "--cut") return;
+        el.removeEventListener("transitionend", onEnd);
+        finishFlip(to);
+      };
+      el.addEventListener("transitionend", onEnd);
+    });
+  }, [finishFlip, reducedMotion, setVars]);
+
+  const peelForward = useCallback(() => startFlip("black"), [startFlip]);
+  const peelBack    = useCallback(() => startFlip("white"), [startFlip]);
+
+  // Маска верхней (белой) страницы
   const whiteMask =
     animDir === "toBlack"
       ? "linear-gradient(to bottom left, transparent var(--cut), #fff var(--cut))"
@@ -122,55 +176,56 @@ export default function BookFlip() {
       ? "linear-gradient(to bottom left, transparent 100%, #fff 100%)"
       : "linear-gradient(to bottom left, transparent 0%, #fff 0%)";
 
-  // --- что монтировать сейчас ---
-  // монтируем чёрную страницу только если она активна ИЛИ мы в процессе перелистывания к ней
-  const mountBlack = flipped || animDir === "toBlack";
-  // белая — активна по умолчанию; при возврате к белой нужна во время "toWhite"
-  const mountWhite = !flipped || animDir === "toWhite";
-
-  // показывать уголки
-  const showTRonWhite = (!flipped && mountWhite) || animDir === "toBlack";
+  const showTRonWhite = !flipped || animDir === "toBlack";
   const showTLonBlack = (flipped && !animDir) || animDir === "toWhite";
+
+  // клавиатура: ←/→
+  const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    if (e.key === "ArrowRight") { peelForward(); e.preventDefault(); }
+    if (e.key === "ArrowLeft")  { peelBack();    e.preventDefault(); }
+  }, [peelForward, peelBack]);
 
   return (
     <div
       ref={rootRef}
-      className="relative bg-black text-white"
-      style={
-        {
-          height: "calc((1 - var(--t, 0)) * var(--hFrom, 100vh) + var(--t, 0) * var(--hTo, 100vh))",
-          minHeight: "100vh",
-          isolation: "isolate",
-          overflow: "hidden",
-          // стартовые значения (перезапишутся measureHeights())
-          ["--hFrom" as any]: initialFlipped ? "var(--hBlack)" : "var(--hWhite)",
-          ["--hTo"   as any]: initialFlipped ? "var(--hBlack)" : "var(--hWhite)",
-          ["--t"     as any]: initialFlipped ? "1" : "0",
-          ["--cut"   as any]: initialFlipped ? "100%" : "0%",
-          willChange: "height",
-        } as React.CSSProperties
-      }
+      className="relative bg-black text-white outline-none"
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      aria-live="polite"
+      style={{
+        // высота анимируется через var(--t)
+        height: "calc((1 - var(--t, 0)) * var(--hFrom, 100vh) + var(--t, 0) * var(--hTo, 100vh))",
+        minHeight: "100vh",
+        isolation: "isolate",
+        overflow: "hidden",
+
+        // начальные значения (SSR-safe)
+        ["--hFrom" as any]: initialFlipped ? "var(--hBlack)" : "var(--hWhite)",
+        ["--hTo"   as any]: initialFlipped ? "var(--hBlack)" : "var(--hWhite)",
+        ["--t"     as any]: initialFlipped ? "1" : "0",
+        ["--cut"   as any]: initialFlipped ? "100%" : "0%",
+      }}
     >
-      {/* ЧЁРНАЯ СТРАНИЦА (НИЖНЯЯ) — монтируем по необходимости */}
+      {/* нижняя (чёрная) страница */}
       <div
         className="absolute inset-0 z-10"
+        aria-hidden={!flipped && !animDir}
         style={{
           transform: "translateZ(0)",
-          contain: "paint",
           isolation: "isolate",
           overflow: "hidden",
           pointerEvents: flipped ? "auto" : "none",
-          visibility: mountBlack ? "visible" : "hidden",
+          visibility: (!flipped && !animDir) ? "hidden" : "visible", // не рисуем, когда точно не нужна
+          willChange: "opacity, transform",
         }}
       >
-        {mountBlack && (
-          <div ref={blackRef}>
-            <CryptoLandingClient />
-          </div>
-        )}
+        <div ref={blackRef}>
+          <CryptoLandingClient />
+        </div>
       </div>
 
-      {/* БЕЛАЯ СТРАНИЦА (ВЕРХНЯЯ, маскируемая) — всегда в DOM, но контент монтируем по необходимости */}
+      {/* верхняя (белая) страница — маскируемая */}
       <div
         className="absolute inset-0 z-20 bg-white text-black"
         style={{
@@ -181,54 +236,79 @@ export default function BookFlip() {
           WebkitMaskSize: "100% 100%",
           maskSize: "100% 100%",
           transform: "translateZ(0)",
-          contain: "paint",
           isolation: "isolate",
           overflow: "hidden",
           pointerEvents: flipped ? "none" : "auto",
+          visibility: (flipped && !animDir) ? "hidden" : "visible",
+          willChange: "transform, -webkit-mask-image, mask-image",
         }}
       >
-        {mountWhite && (
-          <div ref={whiteRef}>
-            <MainPageClient />
-          </div>
-        )}
+        <div ref={whiteRef}>
+          <MainPageClient />
+        </div>
 
-        {/* Уголок top-right (перелистнуть вперёд — белый → чёрный) */}
+        {/* Уголок top-right (белый → чёрный) */}
         {showTRonWhite && (
           <button
             aria-label="Перелистнуть вперёд (белый → чёрный)"
             onClick={peelForward}
-            className="z-100 absolute top-0 right-0 w-[170px] h-[170px] select-none"
+            className="absolute top-0 right-0 w-[170px] h-[170px] select-none z-100"
             style={{
               clipPath: "polygon(100% 0%, calc(100% - var(--curl, 28px)) 0%, 100% var(--curl, 28px))",
               background:
                 "radial-gradient(120px 120px at 100% 0%, rgba(0,0,0,0.22), rgba(0,0,0,0) 60%), linear-gradient(135deg, #ffffff 35%, #efefef 65%, #ffffff 85%)",
               boxShadow: "inset -6px 6px 10px rgba(0,0,0,0.08), 0 1px 0 rgba(0,0,0,0.06)",
               filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.25))",
-              willChange: "transform",
             }}
           />
         )}
       </div>
 
-      {/* Оверлей для уголка на чёрном (перелистнуть назад) */}
+      {/* Отдельный оверлей для уголка на чёрном (виден при чёрном активном) */}
       {showTLonBlack && (
-        <div className="absolute inset-0 z-30 pointer-events-none" aria-hidden={false} style={{ isolation: "isolate" }}>
+        <div
+          className="absolute inset-0 z-30 pointer-events-none"
+          aria-hidden={false}
+          style={{ isolation: "isolate" }}
+        >
           <button
             aria-label="Перелистнуть назад (чёрный → белый)"
             onClick={peelBack}
-            className="z-100 absolute top-0 left-0 w-[170px] h-[170px] select-none pointer-events-auto"
+            className="absolute top-0 left-0 w-[170px] h-[170px] select-none pointer-events-auto"
             style={{
               clipPath: "polygon(0% 0%, var(--curl, 28px) 0%, 0% var(--curl, 28px))",
               background:
                 "radial-gradient(120px 120px at 0% 0%, rgba(255,255,255,0.15), rgba(255,255,255,0) 60%), linear-gradient(225deg, #141414 40%, #000 65%, #0f0f0f 85%)",
               boxShadow: "inset 6px 6px 10px rgba(255,255,255,0.06), 0 1px 0 rgba(255,255,255,0.05)",
               filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.35))",
-              willChange: "transform",
             }}
           />
         </div>
       )}
+
+      {/* Глобальные CSS: регистрация custom properties + transitions */}
+      <style>{`
+        /* Регистрация свойств, чтобы они плавно анимировались (и были интерполируемыми) */
+        @property --t     { syntax: '<number>';     inherits: false; initial-value: 0; }
+        @property --cut   { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+        @property --hFrom { syntax: '<length>';     inherits: false; initial-value: 100vh; }
+        @property --hTo   { syntax: '<length>';     inherits: false; initial-value: 100vh; }
+        @property --hWhite{ syntax: '<length>';     inherits: false; initial-value: 100vh; }
+        @property --hBlack{ syntax: '<length>';     inherits: false; initial-value: 100vh; }
+
+        /* Транзишним только переменные; браузер сам пересчитает height на каждом кадре */
+        [data-bookflip-root], .relative.bg-black {
+          transition:
+            --t ${DURATION_MS}ms ${EASE},
+            --cut ${DURATION_MS}ms ${EASE};
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          [data-bookflip-root], .relative.bg-black {
+            transition: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

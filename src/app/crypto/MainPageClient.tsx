@@ -14,7 +14,7 @@ import GlobalLightAbstractBg from "./GlobalLightAbstractBg";
 
 export default function MainPageClient() {
   return (
-    <div className="relative scroll-smooth bg-white text-neutral-900">
+    <div className="relative bg-white text-neutral-900">
       {/* ЕДИНЫЙ светлый абстрактный фон для всех белых секций */}
       <GlobalLightAbstractBg />
 
@@ -25,17 +25,21 @@ export default function MainPageClient() {
                    bg-gradient-to-r from-transparent via-neutral-200 to-transparent"
       />
 
+      {/* Фикс-хедер + СПЕЙСЕР, чтобы не было CLS при инициализации навигации */}
       <Header />
+      <div aria-hidden className="h-16 md:h-[4.75rem]" />
+
       <main>
         <HeroSection />
-        <SectionDivider />     {/* волна вниз (светлая) */}
+        <SectionDivider />       {/* волна вниз (светлая) */}
         <AboutSection />
-        <SectionDivider flip />{/* волна вверх */}
+        <SectionDivider flip />  {/* волна вверх */}
         <ProjectsSection />
         <SectionDivider flip />
         <ContactSection />
         <SectionDividerBW />
       </main>
+
       <Footer />
     </div>
   );

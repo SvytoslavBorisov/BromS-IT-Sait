@@ -2,59 +2,38 @@
 import React from "react";
 
 /**
- * ЛУННЫЙ светлый фон для всех белых секций.
- * Без styled-jsx, без framer-motion, без фильтров — максимально дружелюбно к Turbopack/SSR.
- * Состоит из двух мягких «аврор» (radialGradient) и едва заметной точечной сетки.
+ * Лёгкий фон для белых секций:
+ *   - две мягкие засветки (radial-gradient)
+ *   - еле заметная точечная сетка (repeating-radial-gradient)
+ *   - плавная вертикальная «штора» через mask-image
+ * Без SVG/фильтров/pattern — минимальные репейнты, хорошо кэшируется GPU.
  */
 export default function GlobalLightAbstractBg() {
   return (
-    <svg
+    <div
       aria-hidden
-      className="fixed inset-0 -z-10 h-screen w-screen pointer-events-none"
-      viewBox="0 0 1440 900"
-      preserveAspectRatio="none"
-    >
-      <defs>
-        {/* Мягкие засветки */}
-        <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
-          gradientTransform="translate(260 140) rotate(0) scale(520 420)">
-          <stop offset="0" stopColor="#c7d2fe" stopOpacity="0.9"/>
-          <stop offset="1" stopColor="#ffffff" stopOpacity="0"/>
-        </radialGradient>
-        <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
-          gradientTransform="translate(1180 720) rotate(0) scale(520 420)">
-          <stop offset="0" stopColor="#a7f3d0" stopOpacity="0.85"/>
-          <stop offset="1" stopColor="#ffffff" stopOpacity="0"/>
-        </radialGradient>
+      className="pointer-events-none fixed inset-0 -z-10 h-screen w-screen"
+      style={{
+        // базовый белый
+        backgroundColor: "#fff",
 
-        {/* Точечная сетка */}
-        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="1" fill="rgba(0,0,0,0.9)" />
-        </pattern>
+        // две засветки
+        backgroundImage: [
+          "radial-gradient(520px 420px at 260px 140px, rgba(199,210,254,0.9) 0%, rgba(255,255,255,0) 100%)",
+          "radial-gradient(520px 420px at calc(100% - 260px) calc(100% - 180px), rgba(167,243,208,0.85) 0%, rgba(255,255,255,0) 100%)",
 
-        {/* Мягкая маска сверху/снизу чтобы фон не «резался» у краёв */}
-        <linearGradient id="fadeY" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="white" stopOpacity="0" />
-          <stop offset="0.12" stopColor="white" stopOpacity="1" />
-          <stop offset="0.88" stopColor="white" stopOpacity="1" />
-          <stop offset="1" stopColor="white" stopOpacity="0" />
-        </linearGradient>
-      </defs>
+          // еле заметная сетка — без SVG pattern
+          "repeating-radial-gradient(circle at 1px 1px, rgba(0,0,0,0.9) 0 1px, transparent 1px 22px)",
+        ].join(","),
+        backgroundBlendMode: "normal, normal, multiply",
+        opacity: 1,
 
-      {/* Белая база */}
-      <rect x="0" y="0" width="1440" height="900" fill="#ffffff" />
-
-      {/* Аврора-пятна */}
-      <rect x="0" y="0" width="1440" height="900" fill="url(#glowA)" />
-      <rect x="0" y="0" width="1440" height="900" fill="url(#glowB)" />
-
-      {/* Точечная сетка под маской (еле заметна) */}
-      <g opacity="0.06" style={{ mixBlendMode: "multiply" }}>
-        <rect x="0" y="0" width="1440" height="900" fill="url(#dots)" />
-      </g>
-
-      {/* Маска по вертикали — чтобы сетка/засветы плавно исчезали у верх/низ */}
-      <rect x="0" y="0" width="1440" height="900" fill="url(#fadeY)" />
-    </svg>
+        // мягкое исчезновение сверху/снизу — через маску (дорого не стоит)
+        WebkitMaskImage:
+          "linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%)",
+        maskImage:
+          "linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%)",
+      }}
+    />
   );
 }
