@@ -6,7 +6,11 @@ module.exports = {
       script: "node_modules/.bin/next",
       args: "start -p 3000",
       env_file: ".env",
-      env: { NODE_ENV: "production", PORT: "3000" },
+      env: {
+        NODE_ENV: "production",
+        PORT: "3000",
+        NODE_OPTIONS: "--max-old-space-size=512"
+      },
       instances: 1,      // можно увеличить/перейти в cluster после
       autorestart: true,
       exec_mode: "fork",
