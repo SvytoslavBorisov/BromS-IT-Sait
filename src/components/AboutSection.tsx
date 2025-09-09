@@ -1,7 +1,7 @@
 // components/AboutSection.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   motion,
   useReducedMotion,
@@ -11,22 +11,37 @@ import {
   useTransform,
 } from "framer-motion";
 
-/** ====== Easing ====== */
+/** ====== Easing (стабильные ссылки) ====== */
 const EASE_IO = [0.4, 0.0, 0.2, 1] as const;
 const EASE_LIN = [0, 0, 1, 1] as const;
 
-/** ====== Белые «шторы» сверху/снизу, чтобы не было жёстких стыков ====== */
-function EdgeFades() {
+/** ====== Стабильные options для viewport ====== */
+const VIEWPORT_06_ONCE = { amount: 0.6, once: true } as const;
+const VIEWPORT_05_ONCE = { amount: 0.5, once: true } as const;
+
+/** ====== Данные вне рендера ====== */
+const CHIPS = ["Next.js", "React", "Node.js", "iOS/Android", "CRM/ERP", "Security"] as const;
+
+const WHAT_WE_DO: React.ReactNode[] = [
+  <>Разработка веб-приложений <span className="font-medium">Next.js, React, Node.js</span></>,
+  <>Мобильные приложения <span className="font-medium">iOS, Android, React Native</span></>,
+  <>Интеграции и настройка корпоративных <span className="font-medium">CRM/ERP</span></>,
+  <>Безопасность: <span className="font-medium">шифрование, подписи, аудит</span></>,
+  <>Поддержка и развитие проектов</>,
+];
+
+/** ====== Белые «шторы» сверху/снизу (pure) ====== */
+const EdgeFades = React.memo(function EdgeFades() {
   return (
     <>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white to-transparent z-0" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-white to-transparent z-0" />
     </>
   );
-}
+});
 
-/** ====== Орбитальные кольца (лёгкая фон. геометрия) ====== */
-function OrbitRings() {
+/** ====== Орбитальные кольца (pure) ====== */
+const OrbitRings = React.memo(function OrbitRings() {
   return (
     <div className="pointer-events-none absolute inset-0 -z-10">
       <div className="absolute inset-2 rounded-full border border-black/5 animate-[spin_70s_linear_infinite]" />
@@ -34,10 +49,23 @@ function OrbitRings() {
       <div className="absolute inset-24 rounded-full border border-black/5 animate-[spin_140s_linear_infinite]" />
     </div>
   );
-}
+});
 
 /** ====== Фон секции: аврора + сетка + частицы ====== */
-function AboutBackground({ reduced }: { reduced: boolean }) {
+const AboutBackground = React.memo(function AboutBackground({ reduced }: { reduced: boolean }) {
+  // сетка и частицы считаем один раз
+  const gridV = useMemo(() => Array.from({ length: 16 }, (_, i) => (i * 1200) / 15), []);
+  const gridH = useMemo(() => Array.from({ length: 10 }, (_, i) => (i * 760) / 9), []);
+  const particles = useMemo(
+    () =>
+      Array.from({ length: 22 }, (_, i) => ({
+        cx: `${(i * 37) % 100}%`,
+        cy: `${(i * 29) % 100}%`,
+        delay: (i % 12) * 0.45,
+      })),
+    []
+  );
+
   return (
     <svg
       className="absolute inset-0 -z-20 h-full w-full pointer-events-none [mask-image:radial-gradient(1200px_760px_at_50%_40%,white,transparent_85%)]"
@@ -110,63 +138,52 @@ function AboutBackground({ reduced }: { reduced: boolean }) {
 
       {/* Сетка */}
       <g stroke="rgba(0,0,0,0.06)" strokeWidth="1">
-        {Array.from({ length: 16 }).map((_, i) => {
-          const x = (i * 1200) / 15;
-          return (
-            <motion.path
-              key={`v-${i}`}
-              d={`M ${x} 0 L ${x} 760`}
-              strokeDasharray="100 100"
-              initial={{ strokeDashoffset: 0, opacity: 0.5 }}
-              animate={reduced ? { opacity: 0.35 } : { strokeDashoffset: [0, 100, 0], opacity: 0.35 }}
-              transition={{ duration: 22, repeat: Infinity, ease: EASE_LIN }}
-            />
-          );
-        })}
-        {Array.from({ length: 10 }).map((_, i) => {
-          const y = (i * 760) / 9;
-          return (
-            <motion.path
-              key={`h-${i}`}
-              d={`M 0 ${y} L 1200 ${y}`}
-              strokeDasharray="100 100"
-              initial={{ strokeDashoffset: 0, opacity: 0.5 }}
-              animate={reduced ? { opacity: 0.35 } : { strokeDashoffset: [0, 100, 0], opacity: 0.35 }}
-              transition={{ duration: 22, repeat: Infinity, ease: EASE_LIN }}
-            />
-          );
-        })}
+        {gridV.map((x, i) => (
+          <motion.path
+            key={`v-${i}`}
+            d={`M ${x} 0 L ${x} 760`}
+            strokeDasharray="100 100"
+            initial={{ strokeDashoffset: 0, opacity: 0.5 }}
+            animate={reduced ? { opacity: 0.35 } : { strokeDashoffset: [0, 100, 0], opacity: 0.35 }}
+            transition={{ duration: 22, repeat: Infinity, ease: EASE_LIN }}
+          />
+        ))}
+        {gridH.map((y, i) => (
+          <motion.path
+            key={`h-${i}`}
+            d={`M 0 ${y} L 1200 ${y}`}
+            strokeDasharray="100 100"
+            initial={{ strokeDashoffset: 0, opacity: 0.5 }}
+            animate={reduced ? { opacity: 0.35 } : { strokeDashoffset: [0, 100, 0], opacity: 0.35 }}
+            transition={{ duration: 22, repeat: Infinity, ease: EASE_LIN }}
+          />
+        ))}
       </g>
 
-      {/* Частицы (в процентах — без window) */}
+      {/* Частицы */}
       <g>
-        {Array.from({ length: 22 }).map((_, i) => {
-          const cx = `${(i * 37) % 100}%`;
-          const cy = `${(i * 29) % 100}%`;
-          const delay = (i % 12) * 0.45;
-          return (
-            <motion.circle
-              key={i}
-              cx={cx}
-              cy={cy}
-              r="1.5"
-              fill="rgba(0,0,0,0.12)"
-              initial={{ opacity: 0.2, translateY: 0 }}
-              animate={reduced ? {} : { opacity: [0.2, 0.55, 0.2], translateY: [-6, 4, -6] }}
-              transition={{ duration: 10, repeat: Infinity, ease: EASE_IO, delay }}
-            />
-          );
-        })}
+        {particles.map(({ cx, cy, delay }, i) => (
+          <motion.circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r="1.5"
+            fill="rgba(0,0,0,0.12)"
+            initial={{ opacity: 0.2, translateY: 0 }}
+            animate={reduced ? {} : { opacity: [0.2, 0.55, 0.2], translateY: [-6, 4, -6] }}
+            transition={{ duration: 10, repeat: Infinity, ease: EASE_IO, delay }}
+          />
+        ))}
       </g>
 
       {/* Лёгкое «зерно» */}
       <rect x="0" y="0" width="1200" height="760" filter="url(#agrain)" />
     </svg>
   );
-}
+});
 
-/** ====== Иконка-галочка ====== */
-function IconCheck() {
+/** ====== Иконка-галочка (pure) ====== */
+const IconCheck = React.memo(function IconCheck() {
   return (
     <svg
       className="mt-1 h-5 w-5 flex-none text-neutral-900"
@@ -179,20 +196,27 @@ function IconCheck() {
       <path d="M20 6 9 17l-5-5" />
     </svg>
   );
-}
+});
 
 /** ====== Счётчик (аним. числа при появлении) ====== */
-function Stat({ label, to, suffix = "" }: { label: string; to: number; suffix?: string }) {
+const Stat = React.memo(function Stat({
+  label,
+  to,
+  suffix = "",
+}: {
+  label: string;
+  to: number;
+  suffix?: string;
+}) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const inView = useInView(ref, { amount: 0.6, once: true });
+  const inView = useInView(ref, VIEWPORT_06_ONCE);
   const mv = useMotionValue(0);
   const value = useTransform(mv, (v) => Math.round(v));
 
   useEffect(() => {
-    if (inView) {
-      const controls = animate(mv, to, { duration: 1.4, ease: EASE_IO });
-      return controls.stop;
-    }
+    if (!inView) return;
+    const controls = animate(mv, to, { duration: 1.4, ease: EASE_IO });
+    return () => controls.stop();
   }, [inView, to, mv]);
 
   return (
@@ -204,16 +228,24 @@ function Stat({ label, to, suffix = "" }: { label: string; to: number; suffix?: 
       </div>
     </div>
   );
-}
+});
 
-/** ====== Карточка шага процесса ====== */
-function StepCard({ title, text, delay = 0 }: { title: string; text: string; delay?: number }) {
+/** ====== Карточка шага процесса (pure) ====== */
+const StepCard = React.memo(function StepCard({
+  title,
+  text,
+  delay = 0,
+}: {
+  title: string;
+  text: string;
+  delay?: number;
+}) {
   return (
     <motion.div
       className="group relative rounded-2xl p-[1px]"
       initial={{ opacity: 0, y: 14 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.6 }}
+      viewport={VIEWPORT_06_ONCE}
       transition={{ duration: 0.55, ease: EASE_IO, delay }}
     >
       <div className="absolute inset-0 rounded-2xl bg-[conic-gradient(from_0deg,rgba(0,0,0,0.08),rgba(0,0,0,0.02),rgba(0,0,0,0.08))]" />
@@ -224,22 +256,18 @@ function StepCard({ title, text, delay = 0 }: { title: string; text: string; del
       </div>
     </motion.div>
   );
-}
+});
 
 /** ====== Главная секция «О нас» ====== */
 export default function AboutSection() {
   const prefersReduced = useReducedMotion();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const chips = ["Next.js", "React", "Node.js", "iOS/Android", "CRM/ERP", "Security"];
 
   return (
     <section id="about" className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28">
       {/* Фон и орбиты */}
       <AboutBackground reduced={!!prefersReduced} />
       <OrbitRings />
-      {/* Белые «шторы» по краям для мягких стыков */}
+      {/* Мягкие стыки */}
       <EdgeFades />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 md:px-8 py-16 md:py-24">
@@ -250,7 +278,7 @@ export default function AboutSection() {
               className="text-4xl md:text-5xl font-semibold tracking-tight"
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
+              viewport={VIEWPORT_06_ONCE}
               transition={{ duration: 0.6, ease: EASE_IO }}
             >
               О нас
@@ -260,7 +288,7 @@ export default function AboutSection() {
               className="mt-4 text-neutral-600 leading-relaxed"
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
+              viewport={VIEWPORT_06_ONCE}
               transition={{ duration: 0.65, ease: EASE_IO, delay: 0.1 }}
             >
               «БромС» — команда, которая делает чистые интерфейсы, чистый код и чистые IT-решения:
@@ -272,7 +300,7 @@ export default function AboutSection() {
               className="mt-3 text-neutral-600 leading-relaxed"
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
+              viewport={VIEWPORT_06_ONCE}
               transition={{ duration: 0.65, ease: EASE_IO, delay: 0.18 }}
             >
               Мы начинаем с цели и аудитории, затем проектируем маршруты, шлифуем UI/UX и закрываем бизнес-метрики.
@@ -281,14 +309,14 @@ export default function AboutSection() {
 
             {/* Чипсы */}
             <div className="mt-6 flex flex-wrap gap-2">
-              {chips.map((t, i) => (
+              {CHIPS.map((t, i) => (
                 <motion.span
                   key={t}
                   className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm"
                   initial={{ opacity: 0, y: 8 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
-                  animate={mounted && !prefersReduced ? { y: [0, -2, 0] } : {}}
+                  viewport={VIEWPORT_06_ONCE}
+                  animate={!prefersReduced ? { y: [0, -2, 0] } : {}}
                   transition={{ duration: 2, ease: EASE_IO, repeat: Infinity, delay: 0.08 * i }}
                 >
                   {t}
@@ -302,26 +330,20 @@ export default function AboutSection() {
             className="relative rounded-3xl bg-white/70 backdrop-blur-xl ring-1 ring-black/10 shadow-[0_40px_120px_-40px_rgba(0,0,0,.25)] p-5 md:p-8"
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             whileInView={{ opacity: 1, y: 0, scale: 1 }}
-            viewport={{ once: true, amount: 0.5 }}
+            viewport={VIEWPORT_05_ONCE}
             transition={{ duration: 0.7, ease: EASE_IO }}
           >
             <span className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-white/40 to-transparent" />
             <h3 className="relative z-10 text-2xl font-semibold">Что мы делаем</h3>
 
             <ul className="relative z-10 mt-4 space-y-4">
-              {[
-                <>Разработка веб-приложений <span className="font-medium">Next.js, React, Node.js</span></>,
-                <>Мобильные приложения <span className="font-medium">iOS, Android, React Native</span></>,
-                <>Интеграции и настройка корпоративных <span className="font-medium">CRM/ERP</span></>,
-                <>Безопасность: <span className="font-medium">шифрование, подписи, аудит</span></>,
-                <>Поддержка и развитие проектов</>,
-              ].map((content, i) => (
+              {WHAT_WE_DO.map((content, i) => (
                 <motion.li
                   key={i}
                   className="flex gap-3"
                   initial={{ opacity: 0, y: 8 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
+                  viewport={VIEWPORT_06_ONCE}
                   transition={{ duration: 0.5, ease: EASE_IO, delay: 0.05 * i }}
                 >
                   <IconCheck />
@@ -346,7 +368,7 @@ export default function AboutSection() {
             className="text-xl md:text-2xl font-semibold"
             initial={{ opacity: 0, y: 12 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.6 }}
+            viewport={VIEWPORT_06_ONCE}
             transition={{ duration: 0.6, ease: EASE_IO }}
           >
             Как мы работаем
