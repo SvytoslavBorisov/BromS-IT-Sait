@@ -3,14 +3,14 @@
 
 import React from "react";
 
-/* ===== Константы вне рендера ===== */
 const STYLE_CSS = `
-  @keyframes waveShiftDesktop { 0% { transform: translateX(0) } 100% { transform: translateX(-50%) } }
-  @keyframes waveShiftMobile  { 0% { transform: translateX(0) } 100% { transform: translateX(-50%) } }
+  @keyframes waveShiftDesktop { 0% { transform: translate3d(0,0,0) } 100% { transform: translate3d(-50%,0,0) } }
+  @keyframes waveShiftMobile  { 0% { transform: translate3d(0,0,0) } 100% { transform: translate3d(-50%,0,0) } }
   .wave-runner { animation: waveShiftMobile 18s linear infinite; will-change: transform; }
   @media (min-width: 768px) { .wave-runner { animation: waveShiftDesktop 14s linear infinite; } }
   @media (prefers-reduced-motion: reduce) { .wave-runner { animation: none; } }
 `;
+
 const PATH_MAIN = `
   M0,78 C240,140 420,20 720,78 C1020,130 1200,40 1440,92
   C1680,140 1860,20 2160,78 C2460,130 2640,40 2880,92
@@ -28,8 +28,8 @@ export default React.memo(function SectionDivider({
   const rootClass = `relative isolate h-16 md:h-24 -mt-6 pointer-events-none bg-white ${className}`;
 
   return (
-    <div aria-hidden className={rootClass}>
-      {/* «шторы» для мягких стыков */}
+    <div aria-hidden className={rootClass} style={{ contain: "paint" }}>
+      {/* мягкие шторы */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-10 md:h-12 bg-gradient-to-b from-white to-transparent z-0" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 md:h-12 bg-gradient-to-t from-white to-transparent z-0" />
 
@@ -37,14 +37,16 @@ export default React.memo(function SectionDivider({
         className={`absolute inset-0 h-full w-full ${flip ? "rotate-180" : ""}`}
         viewBox="0 0 1440 160"
         preserveAspectRatio="none"
+        shapeRendering="geometricPrecision"
       >
         <defs>
           <linearGradient id={`${id}-shadow`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="black" stopOpacity="0.18" />
             <stop offset="1" stopColor="black" stopOpacity="0" />
           </linearGradient>
-          <filter id={`${id}-blur`} x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="8" />
+          {/* blur ограничен по области */}
+          <filter id={`${id}-blur`} x="-15%" y="-50%" width="130%" height="200%">
+            <feGaussianBlur stdDeviation="6" />
           </filter>
 
           <linearGradient id={`${id}-gloss`} x1="0" y1="0" x2="0" y2="1">
@@ -57,14 +59,12 @@ export default React.memo(function SectionDivider({
             <stop offset="1" stopColor="white" stopOpacity="0.0" />
           </linearGradient>
 
-          {/* Анимация — стабильная строка */}
           <style>{STYLE_CSS}</style>
         </defs>
 
         {/* Лента 2× ширины для бесшовного сдвига */}
         <g className="wave-runner" style={{ transformBox: "fill-box", transformOrigin: "center" }}>
           <g>
-            {/* Тень */}
             <path
               d={PATH_MAIN}
               fill="none"
@@ -74,9 +74,7 @@ export default React.memo(function SectionDivider({
               filter={`url(#${id}-blur)`}
               style={{ mixBlendMode: "multiply" }}
             />
-            {/* Основная линия */}
             <path d={PATH_MAIN} fill="none" stroke={`url(#${id}-gloss)`} strokeWidth="3" />
-            {/* Еле заметное свечение */}
             <path d={PATH_GLOW} fill="none" stroke={`url(#${id}-glow)`} strokeWidth="12" />
           </g>
         </g>

@@ -1,19 +1,26 @@
+// components/AboutSection.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
-  motion,
   useReducedMotion,
   useInView,
-  animate,
   useMotionValue,
-  useTransform,
+  useMotionValueEvent,
+  animate,
 } from "framer-motion";
 
-const EASE_IO = [0.4, 0.0, 0.2, 1] as const;
+const EASE_IO = "cubic-bezier(0.4, 0, 0.2, 1)";
 
-/** Фон секции — без морфинга d, только лёгкие transform-анимации */
+/** ===== Фон секции: только CSS-keyframes + ограниченный blur ===== */
 function AboutBackground({ reduced }: { reduced: boolean }) {
+  // Мемоизированная сетка, чтобы не аллоцировать массивы на каждый рендер
+  const grid = useMemo(() => {
+    const vs = Array.from({ length: 10 }, (_, i) => (i * 1200) / 9);
+    const hs = Array.from({ length: 6 }, (_, i) => (i * 760) / 5);
+    return { vs, hs };
+  }, []);
+
   return (
     <svg
       className="absolute inset-0 -z-20 h-full w-full pointer-events-none [mask-image:radial-gradient(1200px_760px_at_50%_40%,white,transparent_85%)]"
@@ -32,43 +39,52 @@ function AboutBackground({ reduced }: { reduced: boolean }) {
           <stop offset="60%" stopColor="#7dd3fc" stopOpacity="0.45" />
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
-        <filter id="ablur">
-          <feGaussianBlur stdDeviation="12" edgeMode="duplicate" />
+        {/* Ограничили область blur, чтобы не блюрить весь вьюпорт */}
+        <filter id="ablur" x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="10" edgeMode="duplicate" />
         </filter>
+
+        <style>{`
+          .abg { transform-origin: 50% 50%; will-change: transform, opacity; }
+          .abg1 { animation: ${reduced ? "none" : "abg-pulse1 16s " + EASE_IO + " infinite"} }
+          .abg2 { animation: ${reduced ? "none" : "abg-pulse2 18s " + EASE_IO + " infinite"} }
+          @keyframes abg-pulse1 { 0%{opacity:.6; transform:scale(1)} 50%{opacity:.72; transform:scale(1.02)} 100%{opacity:.6; transform:scale(1)} }
+          @keyframes abg-pulse2 { 0%{opacity:.45; transform:scale(1)} 50%{opacity:.58; transform:scale(1.02)} 100%{opacity:.45; transform:scale(1)} }
+          @media (prefers-reduced-motion: reduce) {
+            .abg1, .abg2 { animation: none !important; }
+          }
+        `}</style>
       </defs>
 
-      <motion.path
-        d="M 0 440 C 200 480 360 360 600 410 C 840 460 980 320 1200 350 L 1200 760 L 0 760 Z"
-        fill="url(#abg1)"
-        filter="url(#ablur)"
-        initial={{ opacity: 0.6 }}
-        animate={reduced ? {} : { opacity: [0.5, 0.7, 0.5], scale: [1, 1.02, 1] }}
-        transition={{ duration: 16, repeat: Infinity, ease: EASE_IO }}
-      />
-      <motion.path
-        d="M 0 280 C 180 230 420 320 600 300 C 780 280 980 240 1200 280 L 1200 760 L 0 760 Z"
-        fill="url(#abg2)"
-        filter="url(#ablur)"
-        initial={{ opacity: 0.45 }}
-        animate={reduced ? {} : { opacity: [0.4, 0.55, 0.4], scale: [1, 1.02, 1] }}
-        transition={{ duration: 18, repeat: Infinity, ease: EASE_IO }}
-      />
+      <g shapeRendering="optimizeSpeed">
+        <path
+          d="M 0 440 C 200 480 360 360 600 410 C 840 460 980 320 1200 350 L 1200 760 L 0 760 Z"
+          className="abg abg1"
+          fill="url(#abg1)"
+          filter="url(#ablur)"
+        />
+        <path
+          d="M 0 280 C 180 230 420 320 600 300 C 780 280 980 240 1200 280 L 1200 760 L 0 760 Z"
+          className="abg abg2"
+          fill="url(#abg2)"
+          filter="url(#ablur)"
+        />
+      </g>
 
       {/* статичная сетка */}
-      <g stroke="rgba(0,0,0,0.06)" strokeWidth="1">
-        {Array.from({ length: 10 }).map((_, i) => {
-          const x = (i * 1200) / 9;
-          return <path key={`v-${i}`} d={`M ${x} 0 L ${x} 760`} opacity="0.35" />;
-        })}
-        {Array.from({ length: 6 }).map((_, i) => {
-          const y = (i * 760) / 5;
-          return <path key={`h-${i}`} d={`M 0 ${y} L 1200 ${y}`} opacity="0.35" />;
-        })}
+      <g stroke="rgba(0,0,0,0.06)" strokeWidth="1" shapeRendering="crispEdges">
+        {grid.vs.map((x) => (
+          <path key={`v-${x}`} d={`M ${x} 0 L ${x} 760`} opacity="0.35" />
+        ))}
+        {grid.hs.map((y) => (
+          <path key={`h-${y}`} d={`M 0 ${y} L 1200 ${y}`} opacity="0.35" />
+        ))}
       </g>
     </svg>
   );
 }
 
+/** ===== Иконка галочки (без изменений) ===== */
 function IconCheck() {
   return (
     <svg
@@ -84,38 +100,47 @@ function IconCheck() {
   );
 }
 
+/** ===== Счётчик: обновление текста через MotionValueEvent (0 React-ререндеров) ===== */
 function Stat({ label, to, suffix = "" }: { label: string; to: number; suffix?: string }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const inView = useInView(ref, { amount: 0.6, once: true });
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const spanRef = useRef<HTMLSpanElement | null>(null);
+  const inView = useInView(boxRef, { amount: 0.6, once: true });
+
   const mv = useMotionValue(0);
-  const value = useTransform(mv, (v) => Math.round(v));
+
+  useMotionValueEvent(mv, "change", (v) => {
+    if (spanRef.current) spanRef.current.textContent = String(Math.round(v));
+  });
 
   useEffect(() => {
-    if (inView) {
-      const controls = animate(mv, to, { duration: 1.2, ease: EASE_IO });
-      return controls.stop;
-    }
+    if (!inView) return;
+    const controls = animate(mv, to, { duration: 1.2, ease: EASE_IO as any });
+    return () => controls.stop();
   }, [inView, to, mv]);
 
   return (
-    <div ref={ref} className="rounded-2xl bg-white/60 backdrop-blur ring-1 ring-black/10 px-4 py-3 shadow-sm">
+    <div
+      ref={boxRef}
+      className="rounded-2xl bg-white/60 backdrop-blur ring-1 ring-black/10 px-4 py-3 shadow-sm"
+      style={{ willChange: "transform", contain: "paint" }}
+    >
       <div className="text-xs text-neutral-500">{label}</div>
       <div className="text-2xl font-semibold tabular-nums">
-        <motion.span>{value}</motion.span>
+        <span ref={spanRef}>0</span>
         {suffix}
       </div>
     </div>
   );
 }
 
+/** ===== Карточка шага: один проход whileInView, никаких бесконечных циклов ===== */
 function StepCard({ title, text, delay = 0 }: { title: string; text: string; delay?: number }) {
   return (
-    <motion.div
-      className="group relative rounded-2xl p-[1px]"
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.6 }}
-      transition={{ duration: 0.5, ease: EASE_IO, delay }}
+    <div
+      className="group relative rounded-2xl p-[1px] opacity-0 translate-y-[14px] will-change-transform"
+      style={{
+        animation: `step-in 500ms ${EASE_IO} ${delay}s both`,
+      }}
     >
       <div className="absolute inset-0 rounded-2xl bg-[conic-gradient(from_0deg,rgba(0,0,0,0.08),rgba(0,0,0,0.02),rgba(0,0,0,0.08))]" />
       <div className="relative rounded-[1rem] bg-white/70 ring-1 ring-black/10 p-4 backdrop-blur group-hover:shadow-md transition-shadow">
@@ -123,80 +148,79 @@ function StepCard({ title, text, delay = 0 }: { title: string; text: string; del
         <p className="mt-1 text-sm text-neutral-700 leading-relaxed">{text}</p>
         <span className="pointer-events-none absolute -inset-10 rounded-2xl bg-gradient-to-br from-white/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
-    </motion.div>
+
+      <style>{`
+        @keyframes step-in {
+          0%   { opacity: 0; transform: translateY(14px) }
+          100% { opacity: 1; transform: translateY(0) }
+        }
+      `}</style>
+    </div>
   );
 }
 
 export default function AboutSection() {
   const prefersReduced = useReducedMotion();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const chips = ["Next.js", "React", "Node.js", "iOS/Android", "CRM/ERP", "Security"];
+  const chips = useMemo(
+    () => ["Next.js", "React", "Node.js", "iOS/Android", "CRM/ERP", "Security"],
+    []
+  );
 
   return (
-    <section id="about" className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28">
+    <section
+      id="about"
+      className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28"
+      style={{ contain: "layout paint" }}
+    >
       <AboutBackground reduced={!!prefersReduced} />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 md:px-8 py-16 md:py-24">
         <div className="grid items-start gap-10 md:gap-16 md:grid-cols-2">
           <div>
-            <motion.h2
-              className="text-4xl md:text-5xl font-semibold tracking-tight"
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
-              transition={{ duration: 0.6, ease: EASE_IO }}
+            <h2
+              className="text-4xl md:text-5xl font-semibold tracking-tight opacity-0 translate-y-[12px] will-change-transform"
+              style={{ animation: `fadeUp 600ms ${EASE_IO} 0s both` }}
             >
               О нас
-            </motion.h2>
+            </h2>
 
-            <motion.p
-              className="mt-4 text-neutral-600 leading-relaxed"
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
-              transition={{ duration: 0.6, ease: EASE_IO, delay: 0.08 }}
+            <p
+              className="mt-4 text-neutral-600 leading-relaxed opacity-0 translate-y-[12px] will-change-transform"
+              style={{ animation: `fadeUp 600ms ${EASE_IO} .08s both` }}
             >
               «БромС» — команда, которая делает чистые интерфейсы, чистый код и чистые IT-решения:
               от веба и мобильных приложений до интеграций и безопасности. Работаем быстро, прозрачно,
               с фокусом на измеримый результат и долгую поддержку.
-            </motion.p>
+            </p>
 
-            <motion.p
-              className="mt-3 text-neutral-600 leading-relaxed"
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
-              transition={{ duration: 0.6, ease: EASE_IO, delay: 0.16 }}
+            <p
+              className="mt-3 text-neutral-600 leading-relaxed opacity-0 translate-y-[12px] will-change-transform"
+              style={{ animation: `fadeUp 600ms ${EASE_IO} .16s both` }}
             >
               Мы начинаем с цели и аудитории, затем проектируем маршруты, шлифуем UI/UX и закрываем бизнес-метрики.
               Всё — без лишнего визуального шума и «магии плагинов».
-            </motion.p>
+            </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
               {chips.map((t, i) => (
-                <motion.span
+                <span
                   key={t}
-                  className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm"
-                  initial={{ opacity: 0, y: 8 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
-                  animate={mounted && !prefersReduced ? { y: [0, -2, 0] } : {}}
-                  transition={{ duration: 2, ease: EASE_IO, repeat: Infinity, delay: 0.08 * i }}
+                  className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm will-change-transform"
+                  style={{
+                    animation: prefersReduced
+                      ? "none"
+                      : `chip-bob 2000ms ${EASE_IO} ${0.08 * i}s infinite`,
+                  }}
                 >
                   {t}
-                </motion.span>
+                </span>
               ))}
             </div>
           </div>
 
-          <motion.div
-            className="relative rounded-3xl bg-white/70 backdrop-blur-xl ring-1 ring-black/10 shadow-[0_40px_120px_-40px_rgba(0,0,0,.25)] p-5 md:p-8"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            whileInView={{ opacity: 1, y: 0, scale: 1 }}
-            viewport={{ once: true, amount: 0.5 }}
-            transition={{ duration: 0.7, ease: EASE_IO }}
+          <div
+            className="relative rounded-3xl bg-white/70 backdrop-blur-xl ring-1 ring-black/10 shadow-[0_40px_120px_-40px_rgba(0,0,0,.25)] p-5 md:p-8 opacity-0 translate-y-[16px] scale-[.98] will-change-transform"
+            style={{ animation: `cardIn 700ms ${EASE_IO} .1s both` }}
           >
             <span className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-white/40 to-transparent" />
             <h3 className="relative z-10 text-2xl font-semibold">Что мы делаем</h3>
@@ -209,17 +233,14 @@ export default function AboutSection() {
                 <>Безопасность: <span className="font-medium">шифрование, подписи, аудит</span></>,
                 <>Поддержка и развитие проектов</>,
               ].map((content, i) => (
-                <motion.li
+                <li
                   key={i}
-                  className="flex gap-3"
-                  initial={{ opacity: 0, y: 8 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
-                  transition={{ duration: 0.45, ease: EASE_IO, delay: 0.05 * i }}
+                  className="flex gap-3 opacity-0 translate-y-[8px] will-change-transform"
+                  style={{ animation: `fadeUp 450ms ${EASE_IO} ${0.05 * i}s both` }}
                 >
                   <IconCheck />
                   <p className="leading-relaxed">{content}</p>
-                </motion.li>
+                </li>
               ))}
             </ul>
 
@@ -229,19 +250,16 @@ export default function AboutSection() {
               <Stat label="Средний TTV" to={14} suffix=" дн." />
               <Stat label="Измеримая цель" to={100} suffix="%" />
             </div>
-          </motion.div>
+          </div>
         </div>
 
         <div className="mt-12 md:mt-16">
-          <motion.h3
-            className="text-xl md:text-2xl font-semibold"
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.6 }}
-            transition={{ duration: 0.6, ease: EASE_IO }}
+          <h3
+            className="text-xl md:text-2xl font-semibold opacity-0 translate-y-[12px] will-change-transform"
+            style={{ animation: `fadeUp 600ms ${EASE_IO} 0s both` }}
           >
             Как мы работаем
-          </motion.h3>
+          </h3>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <StepCard
@@ -262,6 +280,15 @@ export default function AboutSection() {
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes fadeUp { 0%{opacity:0; transform:translateY(12px)} 100%{opacity:1; transform:translateY(0)} }
+        @keyframes cardIn { 0%{opacity:0; transform:translateY(16px) scale(.98)} 100%{opacity:1; transform:translateY(0) scale(1)} }
+        @keyframes chip-bob { 0%{transform:translateY(0)} 50%{transform:translateY(-2px)} 100%{transform:translateY(0)} }
+        @media (prefers-reduced-motion: reduce) {
+          [style*="animation"] { animation: none !important; }
+        }
+      `}</style>
     </section>
   );
 }

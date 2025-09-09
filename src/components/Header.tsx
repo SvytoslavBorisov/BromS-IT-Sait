@@ -102,7 +102,7 @@ export default function Header() {
     "text-slate-700 hover:text-slate-900 hover:bg-indigo-50/60 aria-[current=true]:text-white";
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 transition backdrop-blur-xl">
+    <header className="absolute top-0 left-0 right-0 z-50 transition backdrop-blur-xl">
       {/* Reading progress + cometa */}
       <div className="absolute inset-x-0 top-0 h-[2px] overflow-visible">
         <div

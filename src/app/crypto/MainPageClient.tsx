@@ -27,7 +27,6 @@ export default function MainPageClient() {
 
       {/* Фикс-хедер + СПЕЙСЕР, чтобы не было CLS при инициализации навигации */}
       <Header />
-      <div aria-hidden className="h-16 md:h-[4.75rem]" />
 
       <main>
         <HeroSection />
