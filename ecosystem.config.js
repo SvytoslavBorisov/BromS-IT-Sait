@@ -13,7 +13,7 @@ module.exports = {
 
       // <— вот здесь передаем V8-флаги
       interpreter: "/usr/bin/node", // можно не указывать, если и так /usr/bin/node
-      interpreter_args: "--initial-old-space-size=256 --max-old-space-size=512",
+      interpreter_args: "--initial-old-space-size=512 --max-old-space-size=1024",
 
       env_file: ".env",
       env: {
