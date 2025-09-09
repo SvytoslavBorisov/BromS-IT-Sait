@@ -252,7 +252,7 @@ export default function BookFlip() {
           <button
             aria-label="Перелистнуть вперёд (белый → чёрный)"
             onClick={peelForward}
-            className="absolute top-0 right-0 w-[170px] h-[170px] select-none"
+            className="absolute top-0 right-0 w-[170px] h-[170px] select-none z-100"
             style={{
               clipPath: "polygon(100% 0%, calc(100% - var(--curl, 28px)) 0%, 100% var(--curl, 28px))",
               background:

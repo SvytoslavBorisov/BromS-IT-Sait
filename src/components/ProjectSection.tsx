@@ -1,20 +1,46 @@
+// src/components/ProjectsSection.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { motion, useMotionValue, useSpring, useReducedMotion } from "framer-motion";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import {
+  motion,
+  useMotionValue,
+  useSpring,
+  useTransform,
+  useReducedMotion,
+  MotionValue,
+} from "framer-motion";
 import CarouselClient from "@/app/CarouselClient";
-import OrbitRings from "@/components/OrbitRings";
 
 const EASE_IO = [0.4, 0.0, 0.2, 1] as const;
 
+// Орбиты грузим лениво, чтобы не мешали TTI
+const OrbitRings = dynamic(() => import("@/components/OrbitRings"), { ssr: false });
+
+/** ===================== ЛЁГКИЙ ФОН СЕКЦИИ ===================== **/
 function ProjectsBackground({
-  tiltX,
-  tiltY,
+  x,
+  y,
   reduced,
-}: { tiltX: number; tiltY: number; reduced: boolean }) {
-  const tx = `translate3d(${tiltX * 2}px, ${tiltY * 2}px, 0)`;
-  const tx2 = `translate3d(${tiltX * -1.2}px, ${tiltY * -1.2}px, 0)`;
-  const tx3 = `translate3d(${tiltX * 0.6}px, ${tiltY * 0.6}px, 0)`;
+}: {
+  x: MotionValue<number>;
+  y: MotionValue<number>;
+  reduced: boolean;
+}) {
+  // Параллакс без ре-рендеров React
+  const g1x = useTransform(x, (v) => v * 2);
+  const g1y = useTransform(y, (v) => v * 2);
+  const g2x = useTransform(x, (v) => v * -1.2);
+  const g2y = useTransform(y, (v) => v * -1.2);
+  const g3x = useTransform(x, (v) => v * 0.6);
+  const g3y = useTransform(y, (v) => v * 0.6);
+
+  const grid = useMemo(() => {
+    const vs = Array.from({ length: 10 }, (_, i) => (i * 1200) / 9);
+    const hs = Array.from({ length: 6 }, (_, i) => (i * 800) / 5);
+    return { vs, hs };
+  }, []);
 
   return (
     <svg
@@ -39,120 +65,180 @@ function ProjectsBackground({
           <stop offset="60%" stopColor="#fecaca" stopOpacity="0.5" />
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
-        <filter id="pblur">
-          <feGaussianBlur stdDeviation="12" edgeMode="duplicate" />
+        {/* Ограничили область блюра — быстрее */}
+        <filter id="pblur" x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="10" edgeMode="duplicate" />
         </filter>
+        <style>{`
+          .p { transform-origin: 50% 50%; will-change: transform, opacity; }
+          .p1 { ${reduced ? "" : "animation: pulse1 16s ease-in-out infinite;"} }
+          .p2 { ${reduced ? "" : "animation: pulse2 18s ease-in-out infinite;"} }
+          .p3 { ${reduced ? "" : "animation: pulse3 14s ease-in-out infinite;"} }
+          @keyframes pulse1 { 0%{opacity:.55; transform:scale(1)} 50%{opacity:.7; transform:scale(1.03)} 100%{opacity:.55; transform:scale(1)} }
+          @keyframes pulse2 { 0%{opacity:.45; transform:scale(1)} 50%{opacity:.6; transform:scale(1.02)} 100%{opacity:.45; transform:scale(1)} }
+          @keyframes pulse3 { 0%{opacity:.55; transform:scale(.97)} 50%{opacity:.65; transform:scale(1.02)} 100%{opacity:.55; transform:scale(.97)} }
+          @media (prefers-reduced-motion: reduce) {
+            .p1,.p2,.p3 { animation: none !important; }
+          }
+        `}</style>
       </defs>
 
-      <g style={{ transform: tx }}>
-        <motion.path
-          initial={{ opacity: 0.6 }}
-          animate={reduced ? {} : { opacity: [0.55, 0.7, 0.55], scale: [1, 1.03, 1] }}
-          transition={{ duration: 16, repeat: Infinity, ease: EASE_IO }}
+      {/* только параллакс через MotionValue; пульсация — CSS */}
+      <motion.g style={{ x: g1x, y: g1y }}>
+        <path
           d="M 0 520 C 220 540 340 380 600 420 C 860 460 980 320 1200 340 L 1200 800 L 0 800 Z"
+          className="p p1"
           fill="url(#pg1)"
           filter="url(#pblur)"
         />
-      </g>
+      </motion.g>
 
-      <g style={{ transform: tx2 }}>
-        <motion.path
-          initial={{ opacity: 0.5 }}
-          animate={reduced ? {} : { opacity: [0.45, 0.6, 0.45], scale: [1, 1.02, 1] }}
-          transition={{ duration: 18, repeat: Infinity, ease: EASE_IO }}
+      <motion.g style={{ x: g2x, y: g2y }}>
+        <path
           d="M 0 300 C 180 260 420 360 600 320 C 780 280 980 220 1200 260 L 1200 800 L 0 800 Z"
+          className="p p2"
           fill="url(#pg2)"
           filter="url(#pblur)"
         />
-      </g>
+      </motion.g>
 
-      <g style={{ transform: tx3 }}>
-        <motion.circle
-          cx="900"
-          cy="680"
-          r="280"
-          fill="url(#pg3)"
-          filter="url(#pblur)"
-          initial={{ scale: 0.97, opacity: 0.6 }}
-          animate={reduced ? {} : { scale: [0.97, 1.02, 0.97], opacity: [0.55, 0.65, 0.55] }}
-          transition={{ duration: 14, repeat: Infinity, ease: EASE_IO }}
-        />
-      </g>
+      <motion.g style={{ x: g3x, y: g3y }}>
+        <circle cx="900" cy="680" r="280" className="p p3" fill="url(#pg3)" filter="url(#pblur)" />
+      </motion.g>
 
-      <g stroke="rgba(0,0,0,0.05)" strokeWidth="1">
-        {Array.from({ length: 10 }).map((_, i) => {
-          const x = (i * 1200) / 9;
-          return <path key={`v-${i}`} d={`M ${x} 0 L ${x} 800`} />;
-        })}
-        {Array.from({ length: 6 }).map((_, i) => {
-          const y = (i * 800) / 5;
-          return <path key={`h-${i}`} d={`M 0 ${y} L 1200 ${y}`} />;
-        })}
+      {/* статичная сетка */}
+      <g stroke="rgba(0,0,0,0.05)" strokeWidth="1" shapeRendering="crispEdges">
+        {grid.vs.map((x) => (
+          <path key={`v-${x}`} d={`M ${x} 0 L ${x} 800`} />
+        ))}
+        {grid.hs.map((y) => (
+          <path key={`h-${y}`} d={`M 0 ${y} L 1200 ${y}`} />
+        ))}
       </g>
     </svg>
   );
 }
 
+/** ===================== СЕКЦИЯ ПРОЕКТОВ ===================== **/
 export default function ProjectsSection() {
-  const prefersReduced = useReducedMotion();
+  const reduced = useReducedMotion();
+  const sectionRef = useRef<HTMLElement | null>(null);
+
   const [sections, setSections] = useState<string[]>([]);
   const [isMobile, setIsMobile] = useState(false);
 
+  // Параллакс-значения
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
   const tiltX = useSpring(mx, { stiffness: 80, damping: 15, mass: 0.3 });
   const tiltY = useSpring(my, { stiffness: 80, damping: 15, mass: 0.3 });
 
+  // rAF-троттлинг и отключение на touch-устройствах
+  useEffect(() => {
+    if (reduced) return;
+    if (typeof window === "undefined") return;
+    const supportsFine = window.matchMedia?.("(pointer: fine)")?.matches;
+    if (!supportsFine) return;
+
+    const el = sectionRef.current ?? document.body;
+    let raf = 0;
+    let lastX = 0;
+    let lastY = 0;
+
+    const onMove = (e: PointerEvent) => {
+      const rect = sectionRef.current?.getBoundingClientRect();
+      const w = rect?.width ?? window.innerWidth;
+      const h = rect?.height ?? window.innerHeight;
+      const left = rect?.left ?? 0;
+      const top = rect?.top ?? 0;
+
+      lastX = ((e.clientX - left) / w - 0.5) * 10;
+      lastY = ((e.clientY - top) / h - 0.5) * -10;
+
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          mx.set(lastX);
+          my.set(lastY);
+          raf = 0;
+        });
+      }
+    };
+    const onLeave = () => {
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          mx.set(0);
+          my.set(0);
+          raf = 0;
+        });
+      }
+    };
+
+    el.addEventListener("pointermove", onMove, { passive: true });
+    el.addEventListener("pointerleave", onLeave, { passive: true });
+
+    return () => {
+      el.removeEventListener("pointermove", onMove as any);
+      el.removeEventListener("pointerleave", onLeave as any);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [mx, my, reduced]);
+
+  // Детект мобильной вёрстки
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)");
     const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     setIsMobile(mql.matches);
     mql.addEventListener("change", onChange);
-    const onMove = (e: MouseEvent) => {
-      const { innerWidth, innerHeight } = window;
-      mx.set((e.clientX / innerWidth - 0.5) * 10);
-      my.set((e.clientY / innerHeight - 0.5) * -10);
-    };
-    window.addEventListener("mousemove", onMove, { passive: true });
-    return () => {
-      mql.removeEventListener("change", onChange);
-      window.removeEventListener("mousemove", onMove);
-    };
-  }, [mx, my]);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
 
-  // подгрузка HTML-доков для карусели
+  // Подгрузка HTML для карусели (с AbortController и кешем)
   useEffect(() => {
-    const baseFiles = ["first", "second"];
-    const files = baseFiles.map((name) => `/projects/${name}_${isMobile ? "mobile" : "desktop"}.html`);
-    let alive = true;
+    const ctrl = new AbortController();
+    const base = ["first", "second"];
+    const urls = base.map(
+      (name) => `/projects/${name}_${isMobile ? "mobile" : "desktop"}.html`
+    );
+
     (async () => {
       try {
         const texts = await Promise.all(
-          files.map(async (url) => {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`Не удалось загрузить ${url}`);
+          urls.map(async (u) => {
+            const res = await fetch(u, { signal: ctrl.signal, cache: "force-cache" });
+            if (!res.ok) throw new Error(`Не удалось загрузить ${u}`);
             return res.text();
           })
         );
-        if (alive) setSections(texts);
+        setSections(texts);
       } catch (e) {
-        console.error(e);
+        if ((e as any)?.name !== "AbortError") console.error(e);
       }
     })();
-    return () => {
-      alive = false;
-    };
+
+    return () => ctrl.abort();
   }, [isMobile]);
 
-  const chips = ["Веб", "Мобайл", "Интеграции", "CRM/ERP", "Security", "Демо-страницы"];
+  const chips = useMemo(
+    () => ["Веб", "Мобайл", "Интеграции", "CRM/ERP", "Security", "Демо-страницы"],
+    []
+  );
 
   return (
-    <section id="portfolio" className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28">
+    <section
+      ref={sectionRef}
+      id="portfolio"
+      className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28"
+      style={{ contain: "layout paint" }}
+    >
+      {/* мягкие шторы */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white to-transparent z-10" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent z-10" />
 
-      <OrbitRings />
-      <ProjectsBackground tiltX={tiltX.get() || 0} tiltY={tiltY.get() || 0} reduced={!!prefersReduced} />
+      <div className="pointer-events-none">
+        <OrbitRings />
+      </div>
+      {/* Передаём MotionValue, а не .get() */}
+      <ProjectsBackground x={tiltX} y={tiltY} reduced={!!reduced} />
 
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 py-16 md:py-24">
         <div className="md:hidden mb-4">
@@ -160,13 +246,18 @@ export default function ProjectsSection() {
         </div>
 
         <div className="grid items-start gap-8 md:gap-12 md:grid-cols-[minmax(0,3.6fr)_minmax(0,2fr)]">
+          {/* Левая колонка: карусель */}
           <div className="-mx-4 md:mx-0 h-[clamp(560px,85svh,620px)]">
-            <div className="relative h-full rounded-none md:rounded-3xl ring-1 ring-black/10 bg-white/70 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,.25)] overflow-hidden">
+            <div
+              className="relative h-full rounded-none md:rounded-3xl ring-1 ring-black/10 bg-white/70 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,.25)] overflow-hidden"
+              style={{ contain: "paint" }}
+            >
               <span className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-white/40 to-transparent" />
               <CarouselClient sections={sections} basePath="/projects/" />
             </div>
           </div>
 
+          {/* Правая колонка: текст/кнопки */}
           <motion.aside
             className="relative px-1 md:px-0 md:sticky md:top-24"
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
@@ -189,19 +280,16 @@ export default function ProjectsSection() {
               поддерживаемый код и прозрачные сроки.
             </p>
 
+            {/* Чипсы — CSS-анимация (0 JS-циклов) */}
             <div className="mt-6 flex flex-wrap gap-2">
               {chips.map((t, i) => (
-                <motion.span
+                <span
                   key={t}
-                  className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm"
-                  initial={{ opacity: 0, y: 8 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
-                  animate={prefersReduced ? {} : { y: [0, -2, 0] }}
-                  transition={{ type: "tween", duration: 2.0, ease: EASE_IO, repeat: Infinity, delay: 0.08 * i }}
+                  className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm chip"
+                  style={{ animationDelay: reduced ? "0s" : `${0.08 * i}s` }}
                 >
                   {t}
-                </motion.span>
+                </span>
               ))}
             </div>
 
@@ -225,6 +313,21 @@ export default function ProjectsSection() {
           </motion.aside>
         </div>
       </div>
+
+      <style>{`
+        .chip {
+          will-change: transform;
+          ${reduced ? "" : "animation: chip-bob 2000ms cubic-bezier(.4,0,.2,1) infinite;"}
+        }
+        @keyframes chip-bob {
+          0% { transform: translateY(0) }
+          50% { transform: translateY(-2px) }
+          100% { transform: translateY(0) }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .chip { animation: none !important; }
+        }
+      `}</style>
     </section>
   );
 }

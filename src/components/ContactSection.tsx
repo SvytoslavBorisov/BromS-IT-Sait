@@ -1,3 +1,4 @@
+// components/ContactSection.tsx
 "use client";
 
 import ContactForm from "@/components/ContactForm";
@@ -64,7 +65,11 @@ export default function ContactSection() {
   const reduced = useReducedMotion();
 
   return (
-    <section id="contact" className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28">
+    <section
+      id="contact"
+      className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28"
+      style={{ contain: "layout paint" }}
+    >
       <ContactBackground reduced={!!reduced} />
 
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 py-20 md:py-28">
@@ -91,19 +96,18 @@ export default function ContactSection() {
               Минимум формальностей, максимум пользы.
             </motion.p>
 
+            {/* Чипсы: переводим на CSS-анимацию (0 JS-циклов) */}
             <div className="mt-6 flex flex-wrap gap-2">
               {CHIPS.map((t, i) => (
-                <motion.span
+                <span
                   key={t}
-                  className="rounded-full bg白/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm"
-                  initial={{ opacity: 0, y: 8 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={VIEWPORT_06_ONCE}
-                  animate={reduced ? {} : { y: [0, -2, 0] }}
-                  transition={{ duration: 2.0, ease: EASE, repeat: Infinity, delay: 0.08 * i }}
+                  className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm chip"
+                  style={{
+                    animationDelay: reduced ? "0s" : `${0.08 * i}s`,
+                  }}
                 >
                   {t}
-                </motion.span>
+                </span>
               ))}
             </div>
 
@@ -144,6 +148,21 @@ export default function ContactSection() {
           </motion.div>
         </div>
       </div>
+
+      <style>{`
+        .chip {
+          will-change: transform;
+          ${reduced ? "" : "animation: chip-bob 2000ms cubic-bezier(.4,0,.2,1) infinite;"}
+        }
+        @keyframes chip-bob {
+          0% { transform: translateY(0) }
+          50% { transform: translateY(-2px) }
+          100% { transform: translateY(0) }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .chip { animation: none !important; }
+        }
+      `}</style>
     </section>
   );
 }

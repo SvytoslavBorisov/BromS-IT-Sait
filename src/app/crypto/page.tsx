@@ -7,7 +7,6 @@ import ScrollProgress from "@/components/ScrollProgress";
 export default function Page() {
   return (
     <div>
-      <ScrollProgress />
       <BookFlip />
     </div>
   );
