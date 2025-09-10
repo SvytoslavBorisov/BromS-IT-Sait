@@ -28,6 +28,11 @@ module.exports = {
       animation: {
         scan: "scan 9s linear infinite",
       },
+      fontFamily: {
+        sans: ["var(--font-onest)", "system-ui", "sans-serif"],
+        display: ["var(--font-onest)", "var(--font-manrope)", "system-ui", "sans-serif"],
+        mono: ["var(--font-jbmono)", "ui-monospace", "SFMono-Regular", "monospace"],
+      },
     },
   },
   plugins: [],

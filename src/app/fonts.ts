@@ -20,3 +20,26 @@ export const geistMono = localFont({
   variable: "--font-geist-mono",
   display: "swap",
 });
+
+import { Onest, Manrope, JetBrains_Mono } from "next/font/google";
+
+export const onest = Onest({
+  subsets: ["cyrillic", "latin"],
+  weight: ["300", "400", "500"],
+  display: "swap",
+  variable: "--font-onest",
+});
+
+export const manrope = Manrope({
+  subsets: ["cyrillic", "latin"],
+  weight: ["400", "500"],
+  display: "swap",
+  variable: "--font-manrope",
+});
+
+export const jbmono = JetBrains_Mono({
+  subsets: ["cyrillic", "latin"],
+  weight: ["500"],
+  display: "swap",
+  variable: "--font-jbmono",
+});

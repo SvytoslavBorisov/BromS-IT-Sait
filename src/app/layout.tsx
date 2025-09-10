@@ -4,6 +4,7 @@ import "@/styles/latex.css";
 import { Providers } from "./providers";
 import type { ReactNode } from "react";
 import { poppins, geistSans, geistMono } from "./fonts";
+import { onest, jbmono, manrope } from "./fonts";
 import { YaMetrika } from "./_analytics/YaMetrika";
 import Script from "next/script";
 import ClientBoot from "./_client-boot";     // ⬅️ новый клиентский компонент
@@ -93,10 +94,10 @@ export default function MainLayout({ children }: { children: ReactNode }) {
 
       <body
         className={[
-          geistSans.variable,
-          geistMono.variable,
-          poppins.variable,
-          "antialiased min-h-screen bg-background text-foreground",
+          onest.variable,
+          manrope.variable,
+          jbmono.variable,
+          "font-sans antialiased min-h-screen bg-background text-foreground",
           "selection:bg-primary/20 selection:text-primary-foreground",
           "supports-[backdrop-filter]:backdrop-blur-[0.5px]",
         ].join(" ")}

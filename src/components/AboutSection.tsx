@@ -1,7 +1,7 @@
 // components/AboutSection.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   useReducedMotion,
   useInView,
@@ -10,11 +10,12 @@ import {
   animate,
 } from "framer-motion";
 
-const EASE_IO = "cubic-bezier(0.4, 0, 0.2, 1)";
+const EASE_CSS = "cubic-bezier(0.4, 0, 0.2, 1)";
+const EASE_FR = [0.4, 0, 0.2, 1] as const; // для Framer Motion
+const NF = new Intl.NumberFormat("ru-RU");
 
-/** ===== Фон секции: только CSS-keyframes + ограниченный blur ===== */
+/** ===== Лёгкий фон секции (CSS-keyframes + ограниченный blur) ===== */
 function AboutBackground({ reduced }: { reduced: boolean }) {
-  // Мемоизированная сетка, чтобы не аллоцировать массивы на каждый рендер
   const grid = useMemo(() => {
     const vs = Array.from({ length: 10 }, (_, i) => (i * 1200) / 9);
     const hs = Array.from({ length: 6 }, (_, i) => (i * 760) / 5);
@@ -39,20 +40,17 @@ function AboutBackground({ reduced }: { reduced: boolean }) {
           <stop offset="60%" stopColor="#7dd3fc" stopOpacity="0.45" />
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
-        {/* Ограничили область blur, чтобы не блюрить весь вьюпорт */}
         <filter id="ablur" x="-10%" y="-10%" width="120%" height="120%">
           <feGaussianBlur stdDeviation="10" edgeMode="duplicate" />
         </filter>
 
         <style>{`
           .abg { transform-origin: 50% 50%; will-change: transform, opacity; }
-          .abg1 { animation: ${reduced ? "none" : "abg-pulse1 16s " + EASE_IO + " infinite"} }
-          .abg2 { animation: ${reduced ? "none" : "abg-pulse2 18s " + EASE_IO + " infinite"} }
+          .abg1 { animation: ${reduced ? "none" : "abg-pulse1 16s " + EASE_CSS + " infinite"} }
+          .abg2 { animation: ${reduced ? "none" : "abg-pulse2 18s " + EASE_CSS + " infinite"} }
           @keyframes abg-pulse1 { 0%{opacity:.6; transform:scale(1)} 50%{opacity:.72; transform:scale(1.02)} 100%{opacity:.6; transform:scale(1)} }
           @keyframes abg-pulse2 { 0%{opacity:.45; transform:scale(1)} 50%{opacity:.58; transform:scale(1.02)} 100%{opacity:.45; transform:scale(1)} }
-          @media (prefers-reduced-motion: reduce) {
-            .abg1, .abg2 { animation: none !important; }
-          }
+          @media (prefers-reduced-motion: reduce) { .abg1, .abg2 { animation: none !important; } }
         `}</style>
       </defs>
 
@@ -71,7 +69,6 @@ function AboutBackground({ reduced }: { reduced: boolean }) {
         />
       </g>
 
-      {/* статичная сетка */}
       <g stroke="rgba(0,0,0,0.06)" strokeWidth="1" shapeRendering="crispEdges">
         {grid.vs.map((x) => (
           <path key={`v-${x}`} d={`M ${x} 0 L ${x} 760`} opacity="0.35" />
@@ -84,7 +81,7 @@ function AboutBackground({ reduced }: { reduced: boolean }) {
   );
 }
 
-/** ===== Иконка галочки (без изменений) ===== */
+/** ===== Иконка галочки ===== */
 function IconCheck() {
   return (
     <svg
@@ -100,7 +97,7 @@ function IconCheck() {
   );
 }
 
-/** ===== Счётчик: обновление текста через MotionValueEvent (0 React-ререндеров) ===== */
+/** ===== Счётчик: Framer animate + format, 0 React-рендеров ===== */
 function Stat({ label, to, suffix = "" }: { label: string; to: number; suffix?: string }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const spanRef = useRef<HTMLSpanElement | null>(null);
@@ -109,12 +106,12 @@ function Stat({ label, to, suffix = "" }: { label: string; to: number; suffix?: 
   const mv = useMotionValue(0);
 
   useMotionValueEvent(mv, "change", (v) => {
-    if (spanRef.current) spanRef.current.textContent = String(Math.round(v));
+    if (spanRef.current) spanRef.current.textContent = NF.format(Math.round(v));
   });
 
   useEffect(() => {
     if (!inView) return;
-    const controls = animate(mv, to, { duration: 1.2, ease: EASE_IO as any });
+    const controls = animate(mv, to, { duration: 1.2, ease: EASE_FR });
     return () => controls.stop();
   }, [inView, to, mv]);
 
@@ -133,27 +130,24 @@ function Stat({ label, to, suffix = "" }: { label: string; to: number; suffix?: 
   );
 }
 
-/** ===== Карточка шага: один проход whileInView, никаких бесконечных циклов ===== */
+/** ===== Карточка шага: высота «под текст», без фиксаций ===== */
 function StepCard({ title, text, delay = 0 }: { title: string; text: string; delay?: number }) {
   return (
     <div
-      className="group relative rounded-2xl p-[1px] opacity-0 translate-y-[14px] will-change-transform"
-      style={{
-        animation: `step-in 500ms ${EASE_IO} ${delay}s both`,
-      }}
+      className="group relative rounded-2xl p-[1px] opacity-0 translate-y-[14px] will-change-transform h-auto"
+      style={{ animation: `step-in 500ms ${EASE_CSS} ${delay}s both` }}
     >
       <div className="absolute inset-0 rounded-2xl bg-[conic-gradient(from_0deg,rgba(0,0,0,0.08),rgba(0,0,0,0.02),rgba(0,0,0,0.08))]" />
-      <div className="relative rounded-[1rem] bg-white/70 ring-1 ring-black/10 p-4 backdrop-blur group-hover:shadow-md transition-shadow">
-        <div className="text-sm font-medium">{title}</div>
-        <p className="mt-1 text-sm text-neutral-700 leading-relaxed">{text}</p>
+      <div className="relative rounded-[1rem] bg-white/70 ring-1 ring-black/10 p-4 backdrop-blur transition-shadow group-hover:shadow-md h-auto">
+        <div className="text-sm font-medium [text-wrap:balance]">{title}</div>
+        <p className="mt-1 text-sm text-neutral-700 leading-relaxed [text-wrap:balance]">
+          {text}
+        </p>
         <span className="pointer-events-none absolute -inset-10 rounded-2xl bg-gradient-to-br from-white/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
 
       <style>{`
-        @keyframes step-in {
-          0%   { opacity: 0; transform: translateY(14px) }
-          100% { opacity: 1; transform: translateY(0) }
-        }
+        @keyframes step-in { 0% { opacity:0; transform: translateY(14px) } 100% { opacity:1; transform: translateY(0) } }
       `}</style>
     </div>
   );
@@ -161,6 +155,18 @@ function StepCard({ title, text, delay = 0 }: { title: string; text: string; del
 
 export default function AboutSection() {
   const prefersReduced = useReducedMotion();
+  const [reduceMore, setReduceMore] = useState(false);
+
+  // Лёгкий «perf-gate»: на тач/узких/слабых отключаем пульсации фона.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const coarse = matchMedia("(pointer: coarse)").matches;
+    const small = matchMedia("(max-width: 767px)").matches;
+    const dm = (navigator as any).deviceMemory ?? 8;
+    const hc = navigator.hardwareConcurrency ?? 8;
+    setReduceMore(coarse || small || dm <= 4 || hc <= 4);
+  }, []);
+
   const chips = useMemo(
     () => ["Next.js", "React", "Node.js", "iOS/Android", "CRM/ERP", "Security"],
     []
@@ -172,21 +178,21 @@ export default function AboutSection() {
       className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28"
       style={{ contain: "layout paint" }}
     >
-      <AboutBackground reduced={!!prefersReduced} />
+      <AboutBackground reduced={!!prefersReduced || reduceMore} />
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 md:px-8 py-16 md:py-24">
         <div className="grid items-start gap-10 md:gap-16 md:grid-cols-2">
           <div>
             <h2
               className="text-4xl md:text-5xl font-semibold tracking-tight opacity-0 translate-y-[12px] will-change-transform"
-              style={{ animation: `fadeUp 600ms ${EASE_IO} 0s both` }}
+              style={{ animation: `fadeUp 600ms ${EASE_CSS} 0s both` }}
             >
               О нас
             </h2>
 
             <p
-              className="mt-4 text-neutral-600 leading-relaxed opacity-0 translate-y-[12px] will-change-transform"
-              style={{ animation: `fadeUp 600ms ${EASE_IO} .08s both` }}
+              className="mt-4 text-neutral-600 leading-relaxed opacity-0 translate-y-[12px] will-change-transform [text-wrap:balance]"
+              style={{ animation: `fadeUp 600ms ${EASE_CSS} .08s both` }}
             >
               «БромС» — команда, которая делает чистые интерфейсы, чистый код и чистые IT-решения:
               от веба и мобильных приложений до интеграций и безопасности. Работаем быстро, прозрачно,
@@ -194,8 +200,8 @@ export default function AboutSection() {
             </p>
 
             <p
-              className="mt-3 text-neutral-600 leading-relaxed opacity-0 translate-y-[12px] will-change-transform"
-              style={{ animation: `fadeUp 600ms ${EASE_IO} .16s both` }}
+              className="mt-3 text-neutral-600 leading-relaxed opacity-0 translate-y-[12px] will-change-transform [text-wrap:balance]"
+              style={{ animation: `fadeUp 600ms ${EASE_CSS} .16s both` }}
             >
               Мы начинаем с цели и аудитории, затем проектируем маршруты, шлифуем UI/UX и закрываем бизнес-метрики.
               Всё — без лишнего визуального шума и «магии плагинов».
@@ -207,9 +213,9 @@ export default function AboutSection() {
                   key={t}
                   className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm will-change-transform"
                   style={{
-                    animation: prefersReduced
+                    animation: (prefersReduced || reduceMore)
                       ? "none"
-                      : `chip-bob 2000ms ${EASE_IO} ${0.08 * i}s infinite`,
+                      : `chip-bob 2000ms ${EASE_CSS} ${0.08 * i}s infinite`,
                   }}
                 >
                   {t}
@@ -220,7 +226,7 @@ export default function AboutSection() {
 
           <div
             className="relative rounded-3xl bg-white/70 backdrop-blur-xl ring-1 ring-black/10 shadow-[0_40px_120px_-40px_rgba(0,0,0,.25)] p-5 md:p-8 opacity-0 translate-y-[16px] scale-[.98] will-change-transform"
-            style={{ animation: `cardIn 700ms ${EASE_IO} .1s both` }}
+            style={{ animation: `cardIn 700ms ${EASE_CSS} .1s both` }}
           >
             <span className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-white/40 to-transparent" />
             <h3 className="relative z-10 text-2xl font-semibold">Что мы делаем</h3>
@@ -236,10 +242,10 @@ export default function AboutSection() {
                 <li
                   key={i}
                   className="flex gap-3 opacity-0 translate-y-[8px] will-change-transform"
-                  style={{ animation: `fadeUp 450ms ${EASE_IO} ${0.05 * i}s both` }}
+                  style={{ animation: `fadeUp 450ms ${EASE_CSS} ${0.05 * i}s both` }}
                 >
                   <IconCheck />
-                  <p className="leading-relaxed">{content}</p>
+                  <p className="leading-relaxed [text-wrap:balance]">{content}</p>
                 </li>
               ))}
             </ul>
@@ -256,12 +262,13 @@ export default function AboutSection() {
         <div className="mt-12 md:mt-16">
           <h3
             className="text-xl md:text-2xl font-semibold opacity-0 translate-y-[12px] will-change-transform"
-            style={{ animation: `fadeUp 600ms ${EASE_IO} 0s both` }}
+            style={{ animation: `fadeUp 600ms ${EASE_CSS} 0s both` }}
           >
             Как мы работаем
           </h3>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {/* Сетка «под текст»: ширина карточек адаптивная, высота — по содержимому */}
+          <div className="mt-5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
             <StepCard
               title="1. Диагностика"
               text="Формулируем бизнес-цель, проверяем гипотезы, собираем требования и ограничения. Переводим это в измеримые метрики."
@@ -285,9 +292,7 @@ export default function AboutSection() {
         @keyframes fadeUp { 0%{opacity:0; transform:translateY(12px)} 100%{opacity:1; transform:translateY(0)} }
         @keyframes cardIn { 0%{opacity:0; transform:translateY(16px) scale(.98)} 100%{opacity:1; transform:translateY(0) scale(1)} }
         @keyframes chip-bob { 0%{transform:translateY(0)} 50%{transform:translateY(-2px)} 100%{transform:translateY(0)} }
-        @media (prefers-reduced-motion: reduce) {
-          [style*="animation"] { animation: none !important; }
-        }
+        @media (prefers-reduced-motion: reduce) { [style*="animation"] { animation: none !important; } }
       `}</style>
     </section>
   );

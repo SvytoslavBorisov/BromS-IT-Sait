@@ -15,7 +15,7 @@ import CarouselClient from "@/app/CarouselClient";
 
 const EASE_IO = [0.4, 0.0, 0.2, 1] as const;
 
-// Орбиты грузим лениво, чтобы не мешали TTI
+// Орбиты грузим лениво
 const OrbitRings = dynamic(() => import("@/components/OrbitRings"), { ssr: false });
 
 /** ===================== ЛЁГКИЙ ФОН СЕКЦИИ ===================== **/
@@ -28,7 +28,6 @@ function ProjectsBackground({
   y: MotionValue<number>;
   reduced: boolean;
 }) {
-  // Параллакс без ре-рендеров React
   const g1x = useTransform(x, (v) => v * 2);
   const g1y = useTransform(y, (v) => v * 2);
   const g2x = useTransform(x, (v) => v * -1.2);
@@ -65,7 +64,6 @@ function ProjectsBackground({
           <stop offset="60%" stopColor="#fecaca" stopOpacity="0.5" />
           <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
-        {/* Ограничили область блюра — быстрее */}
         <filter id="pblur" x="-10%" y="-10%" width="120%" height="120%">
           <feGaussianBlur stdDeviation="10" edgeMode="duplicate" />
         </filter>
@@ -77,43 +75,27 @@ function ProjectsBackground({
           @keyframes pulse1 { 0%{opacity:.55; transform:scale(1)} 50%{opacity:.7; transform:scale(1.03)} 100%{opacity:.55; transform:scale(1)} }
           @keyframes pulse2 { 0%{opacity:.45; transform:scale(1)} 50%{opacity:.6; transform:scale(1.02)} 100%{opacity:.45; transform:scale(1)} }
           @keyframes pulse3 { 0%{opacity:.55; transform:scale(.97)} 50%{opacity:.65; transform:scale(1.02)} 100%{opacity:.55; transform:scale(.97)} }
-          @media (prefers-reduced-motion: reduce) {
-            .p1,.p2,.p3 { animation: none !important; }
-          }
+          @media (prefers-reduced-motion: reduce) { .p1,.p2,.p3 { animation: none !important; } }
         `}</style>
       </defs>
 
-      {/* только параллакс через MotionValue; пульсация — CSS */}
       <motion.g style={{ x: g1x, y: g1y }}>
-        <path
-          d="M 0 520 C 220 540 340 380 600 420 C 860 460 980 320 1200 340 L 1200 800 L 0 800 Z"
-          className="p p1"
-          fill="url(#pg1)"
-          filter="url(#pblur)"
-        />
+        <path d="M 0 520 C 220 540 340 380 600 420 C 860 460 980 320 1200 340 L 1200 800 L 0 800 Z"
+              className="p p1" fill="url(#pg1)" filter="url(#pblur)" />
       </motion.g>
 
       <motion.g style={{ x: g2x, y: g2y }}>
-        <path
-          d="M 0 300 C 180 260 420 360 600 320 C 780 280 980 220 1200 260 L 1200 800 L 0 800 Z"
-          className="p p2"
-          fill="url(#pg2)"
-          filter="url(#pblur)"
-        />
+        <path d="M 0 300 C 180 260 420 360 600 320 C 780 280 980 220 1200 260 L 1200 800 L 0 800 Z"
+              className="p p2" fill="url(#pg2)" filter="url(#pblur)" />
       </motion.g>
 
       <motion.g style={{ x: g3x, y: g3y }}>
         <circle cx="900" cy="680" r="280" className="p p3" fill="url(#pg3)" filter="url(#pblur)" />
       </motion.g>
 
-      {/* статичная сетка */}
       <g stroke="rgba(0,0,0,0.05)" strokeWidth="1" shapeRendering="crispEdges">
-        {grid.vs.map((x) => (
-          <path key={`v-${x}`} d={`M ${x} 0 L ${x} 800`} />
-        ))}
-        {grid.hs.map((y) => (
-          <path key={`h-${y}`} d={`M 0 ${y} L 1200 ${y}`} />
-        ))}
+        {grid.vs.map((x) => <path key={`v-${x}`} d={`M ${x} 0 L ${x} 800`} />)}
+        {grid.hs.map((y) => <path key={`h-${y}`} d={`M 0 ${y} L 1200 ${y}`} />)}
       </g>
     </svg>
   );
@@ -127,13 +109,13 @@ export default function ProjectsSection() {
   const [sections, setSections] = useState<string[]>([]);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Параллакс-значения
+  // Параллакс
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
   const tiltX = useSpring(mx, { stiffness: 80, damping: 15, mass: 0.3 });
   const tiltY = useSpring(my, { stiffness: 80, damping: 15, mass: 0.3 });
 
-  // rAF-троттлинг и отключение на touch-устройствах
+  // Параллакс — только pointer:fine
   useEffect(() => {
     if (reduced) return;
     if (typeof window === "undefined") return;
@@ -141,9 +123,7 @@ export default function ProjectsSection() {
     if (!supportsFine) return;
 
     const el = sectionRef.current ?? document.body;
-    let raf = 0;
-    let lastX = 0;
-    let lastY = 0;
+    let raf = 0, lastX = 0, lastY = 0;
 
     const onMove = (e: PointerEvent) => {
       const rect = sectionRef.current?.getBoundingClientRect();
@@ -151,31 +131,24 @@ export default function ProjectsSection() {
       const h = rect?.height ?? window.innerHeight;
       const left = rect?.left ?? 0;
       const top = rect?.top ?? 0;
-
       lastX = ((e.clientX - left) / w - 0.5) * 10;
       lastY = ((e.clientY - top) / h - 0.5) * -10;
-
       if (!raf) {
         raf = requestAnimationFrame(() => {
-          mx.set(lastX);
-          my.set(lastY);
-          raf = 0;
+          mx.set(lastX); my.set(lastY); raf = 0;
         });
       }
     };
     const onLeave = () => {
       if (!raf) {
         raf = requestAnimationFrame(() => {
-          mx.set(0);
-          my.set(0);
-          raf = 0;
+          mx.set(0); my.set(0); raf = 0;
         });
       }
     };
 
     el.addEventListener("pointermove", onMove, { passive: true });
     el.addEventListener("pointerleave", onLeave, { passive: true });
-
     return () => {
       el.removeEventListener("pointermove", onMove as any);
       el.removeEventListener("pointerleave", onLeave as any);
@@ -183,7 +156,7 @@ export default function ProjectsSection() {
     };
   }, [mx, my, reduced]);
 
-  // Детект мобильной вёрстки
+  // Детект мобилы
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)");
     const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
@@ -192,14 +165,13 @@ export default function ProjectsSection() {
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  // Подгрузка HTML для карусели (с AbortController и кешем)
+  // Загрузка HTML-секций для карусели
   useEffect(() => {
     const ctrl = new AbortController();
     const base = ["first", "second"];
     const urls = base.map(
       (name) => `/projects/${name}_${isMobile ? "mobile" : "desktop"}.html`
     );
-
     (async () => {
       try {
         const texts = await Promise.all(
@@ -214,7 +186,6 @@ export default function ProjectsSection() {
         if ((e as any)?.name !== "AbortError") console.error(e);
       }
     })();
-
     return () => ctrl.abort();
   }, [isMobile]);
 
@@ -229,20 +200,31 @@ export default function ProjectsSection() {
       id="portfolio"
       className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28"
       style={{ contain: "layout paint" }}
+      aria-labelledby="projects-title-mobile projects-title-desktop"
     >
       {/* мягкие шторы */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white to-transparent z-10" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent z-10" />
 
-      <div className="pointer-events-none">
-        <OrbitRings />
-      </div>
-      {/* Передаём MotionValue, а не .get() */}
+      {/* Орбиты выключаем на мобиле для производительности */}
+      {!isMobile && (
+        <div className="pointer-events-none">
+          <OrbitRings />
+        </div>
+      )}
+
       <ProjectsBackground x={tiltX} y={tiltY} reduced={!!reduced} />
 
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 py-16 md:py-24">
-        <div className="md:hidden mb-4">
-          <h2 className="text-3xl font-semibold tracking-tight">Наши проекты</h2>
+        {/* ЕДИНСТВЕННЫЙ заголовок на мобиле (красивый сверху) */}
+        <div className="md:hidden mb-6">
+          <h2
+            id="projects-title-mobile"
+            className="text-center text-3xl font-semibold tracking-tight"
+          >
+            Наши проекты
+          </h2>
+          <span className="mt-2 block h-[3px] w-24 mx-auto rounded-full bg-gradient-to-r from-neutral-900/60 via-neutral-400/60 to-neutral-900/60" />
         </div>
 
         <div className="grid items-start gap-8 md:gap-12 md:grid-cols-[minmax(0,3.6fr)_minmax(0,2fr)]">
@@ -265,8 +247,10 @@ export default function ProjectsSection() {
             viewport={{ once: true, amount: 0.5 }}
             transition={{ type: "tween", duration: 0.7, ease: EASE_IO }}
           >
+            {/* ДЕСКТОПНЫЙ заголовок; скрыт на мобиле */}
             <motion.h2
-              className="text-4xl md:text-5xl font-semibold tracking-tight"
+              id="projects-title-desktop"
+              className="hidden md:block text-4xl md:text-5xl font-semibold tracking-tight"
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.6 }}
@@ -280,7 +264,6 @@ export default function ProjectsSection() {
               поддерживаемый код и прозрачные сроки.
             </p>
 
-            {/* Чипсы — CSS-анимация (0 JS-циклов) */}
             <div className="mt-6 flex flex-wrap gap-2">
               {chips.map((t, i) => (
                 <span
