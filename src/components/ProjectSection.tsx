@@ -1,4 +1,3 @@
-// src/components/ProjectsSection.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -9,23 +8,22 @@ import {
   useSpring,
   useTransform,
   useReducedMotion,
-  MotionValue,
 } from "framer-motion";
 import CarouselClient from "@/app/CarouselClient";
 
 const EASE_IO = [0.4, 0.0, 0.2, 1] as const;
 
-// Орбиты грузим лениво
+// Орбиты грузим лениво (используем только НЕ на мобилке)
 const OrbitRings = dynamic(() => import("@/components/OrbitRings"), { ssr: false });
 
-/** ===================== ЛЁГКИЙ ФОН СЕКЦИИ ===================== **/
+/** ===================== ЛЁГКИЙ ФОН СЕКЦИИ (только для десктопа/планшета) ===================== **/
 function ProjectsBackground({
   x,
   y,
   reduced,
 }: {
-  x: MotionValue<number>;
-  y: MotionValue<number>;
+  x: ReturnType<typeof useSpring>;
+  y: ReturnType<typeof useSpring>;
   reduced: boolean;
 }) {
   const g1x = useTransform(x, (v) => v * 2);
@@ -109,18 +107,25 @@ export default function ProjectsSection() {
   const [sections, setSections] = useState<string[]>([]);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Параллакс
+  // Чипсы (были не объявлены)
+  const chips = useMemo(
+    () => ["Веб", "Мобайл", "Интеграции", "CRM/ERP", "Security", "Демо-страницы"],
+    []
+  );
+
+  // Параллакс (используем только на десктопе)
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
   const tiltX = useSpring(mx, { stiffness: 80, damping: 15, mass: 0.3 });
   const tiltY = useSpring(my, { stiffness: 80, damping: 15, mass: 0.3 });
 
-  // Параллакс — только pointer:fine
   useEffect(() => {
     if (reduced) return;
     if (typeof window === "undefined") return;
+
     const supportsFine = window.matchMedia?.("(pointer: fine)")?.matches;
     if (!supportsFine) return;
+    if (isMobile) return; // просто выходим, deps фиксированы
 
     const el = sectionRef.current ?? document.body;
     let raf = 0, lastX = 0, lastY = 0;
@@ -149,12 +154,13 @@ export default function ProjectsSection() {
 
     el.addEventListener("pointermove", onMove, { passive: true });
     el.addEventListener("pointerleave", onLeave, { passive: true });
+
     return () => {
       el.removeEventListener("pointermove", onMove as any);
       el.removeEventListener("pointerleave", onLeave as any);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [mx, my, reduced]);
+  }, [mx, my, reduced, isMobile, sectionRef]);
 
   // Детект мобилы
   useEffect(() => {
@@ -189,49 +195,89 @@ export default function ProjectsSection() {
     return () => ctrl.abort();
   }, [isMobile]);
 
-  const chips = useMemo(
-    () => ["Веб", "Мобайл", "Интеграции", "CRM/ERP", "Security", "Демо-страницы"],
-    []
-  );
+  /** ====== Мобильная версия: максимально лёгкая ====== */
+  if (isMobile) {
+    return (
+      <section
+        ref={sectionRef}
+        id="portfolio"
+        className="relative overflow-hidden bg-white text-neutral-900 scroll-mt-24"
+        aria-label="Наши проекты"
+        style={{ contain: "layout paint" }}
+      >
+        <div className="mx-auto max-w-7xl px-4 py-12">
+          <h2 className="text-center text-3xl font-semibold tracking-tight">
+            Наши проекты
+          </h2>
 
+          <div className="mt-6 h-[min(72svh,520px)] -mx-4 rounded-none ring-0 bg-transparent">
+            {/* Лёгкий CarouselClient — без эффектов на мобиле */}
+            <CarouselClient sections={sections} basePath="/projects/" />
+          </div>
+
+          <p className="mt-6 text-[15px] text-neutral-700 leading-relaxed">
+            Подборка реальных кейсов, демо и объектов из нашего стека. Аккуратный UI,
+            поддерживаемый код и прозрачные сроки.
+          </p>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            {chips.map((t) => (
+              <span
+                key={t}
+                className="rounded-full bg-neutral-100 px-3 py-1 text-sm ring-1 ring-black/10"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-8 flex flex-wrap gap-2">
+            <a
+              href="#contact"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black text-white px-4 py-2 text-sm font-medium"
+            >
+              Обсудить проект
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M5 12h14M13 5l7 7-7 7" />
+              </svg>
+            </a>
+            <a
+              href="/portfolio"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-medium ring-1 ring-black/10"
+            >
+              Все кейсы
+            </a>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  /** ====== Десктоп/планшет: красиво, но разумно ====== */
   return (
     <section
       ref={sectionRef}
       id="portfolio"
       className="relative isolate overflow-hidden bg-white text-neutral-900 scroll-mt-28"
+      aria-label="Наши проекты"
       style={{ contain: "layout paint" }}
-      aria-labelledby="projects-title-mobile projects-title-desktop"
     >
       {/* мягкие шторы */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white to-transparent z-10" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent z-10" />
 
-      {/* Орбиты выключаем на мобиле для производительности */}
-      {!isMobile && (
-        <div className="pointer-events-none">
-          <OrbitRings />
-        </div>
-      )}
-
+      {/* Декор только не на мобиле */}
+      <div className="pointer-events-none">
+        <OrbitRings />
+      </div>
       <ProjectsBackground x={tiltX} y={tiltY} reduced={!!reduced} />
 
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 py-16 md:py-24">
-        {/* ЕДИНСТВЕННЫЙ заголовок на мобиле (красивый сверху) */}
-        <div className="md:hidden mb-6">
-          <h2
-            id="projects-title-mobile"
-            className="text-center text-3xl font-semibold tracking-tight"
-          >
-            Наши проекты
-          </h2>
-          <span className="mt-2 block h-[3px] w-24 mx-auto rounded-full bg-gradient-to-r from-neutral-900/60 via-neutral-400/60 to-neutral-900/60" />
-        </div>
-
-        <div className="grid items-start gap-8 md:gap-12 md:grid-cols-[minmax(0,3.6fr)_minmax(0,2fr)]">
-          {/* Левая колонка: карусель */}
-          <div className="-mx-4 md:mx-0 h-[clamp(560px,85svh,620px)]">
+        <div className="mt-0 grid items-start gap-12 md:grid-cols-[minmax(0,3.6fr)_minmax(0,2fr)]">
+          {/* Левая колонка: карусель (слева по умолчанию) */}
+          <div className="order-1 md:order-1 h-[clamp(560px,80svh,700px)]">
             <div
-              className="relative h-full rounded-none md:rounded-3xl ring-1 ring-black/10 bg-white/70 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,.25)] overflow-hidden"
+              className="relative rounded-3xl ring-1 ring-black/10 bg-white/70 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,.25)] overflow-hidden"
               style={{ contain: "paint" }}
             >
               <span className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-white/40 to-transparent" />
@@ -241,16 +287,14 @@ export default function ProjectsSection() {
 
           {/* Правая колонка: текст/кнопки */}
           <motion.aside
-            className="relative px-1 md:px-0 md:sticky md:top-24"
+            className="order-2 md:order-2 relative px-1 md:px-0 md:sticky md:top-24"
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             whileInView={{ opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true, amount: 0.5 }}
             transition={{ type: "tween", duration: 0.7, ease: EASE_IO }}
           >
-            {/* ДЕСКТОПНЫЙ заголовок; скрыт на мобиле */}
             <motion.h2
-              id="projects-title-desktop"
-              className="hidden md:block text-4xl md:text-5xl font-semibold tracking-tight"
+              className="text-4xl md:text-5xl font-semibold tracking-tight pb-5"
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.6 }}
@@ -259,17 +303,16 @@ export default function ProjectsSection() {
               Наши проекты
             </motion.h2>
 
-            <p className="mt-3 text-[15px] text-neutral-600 leading-relaxed">
+            <p className="text-[15px] text-neutral-600 leading-relaxed">
               Подборка реальных кейсов, демо и объектов из нашего стека. Аккуратный UI,
               поддерживаемый код и прозрачные сроки.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {chips.map((t, i) => (
+              {chips.map((t) => (
                 <span
                   key={t}
-                  className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm chip"
-                  style={{ animationDelay: reduced ? "0s" : `${0.08 * i}s` }}
+                  className="rounded-full bg-white/70 px-3 py-1 text-sm ring-1 ring-black/10 backdrop-blur-md shadow-sm"
                 >
                   {t}
                 </span>
@@ -296,21 +339,6 @@ export default function ProjectsSection() {
           </motion.aside>
         </div>
       </div>
-
-      <style>{`
-        .chip {
-          will-change: transform;
-          ${reduced ? "" : "animation: chip-bob 2000ms cubic-bezier(.4,0,.2,1) infinite;"}
-        }
-        @keyframes chip-bob {
-          0% { transform: translateY(0) }
-          50% { transform: translateY(-2px) }
-          100% { transform: translateY(0) }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .chip { animation: none !important; }
-        }
-      `}</style>
     </section>
   );
 }
