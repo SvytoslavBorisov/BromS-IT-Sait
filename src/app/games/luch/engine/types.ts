@@ -72,3 +72,11 @@ export type InventoryItem = {
 
 /** ===================== Сложность ===================== */
 export type Difficulty = "easy" | "normal" | "hard" | "insane";
+
+
+// engine/types.ts
+export type PctPoint = Readonly<{ x: number; y: number }>;
+
+
+export type CircleKind = "filter" | "decoy" | "goal";
+

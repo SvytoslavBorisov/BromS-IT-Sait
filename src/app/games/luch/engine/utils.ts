@@ -43,3 +43,4 @@ export const pointKey = (x: number, y: number, extra = "") =>
 /** ===== СЛУЧАЙНЫЕ ЧИСЛА (добавлено для levelGen) ===== */
 export const randBetween = (min: number, max: number) => Math.random() * (max - min) + min;
 export const randInt = (min: number, max: number) => Math.floor(randBetween(min, max + 1));
+
