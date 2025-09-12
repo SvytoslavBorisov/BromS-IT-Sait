@@ -12,6 +12,7 @@ const PaintByNumbers = dynamic(() => import("./PaintByNumbers"), { ssr: false })
 const GrayRabkin = dynamic(() => import("./GrayRabkin"), { ssr: false });
  const LightBeamsDemo = dynamic(() => import("./ColorLuch"), { ssr: false });
  const ColorMixConnect = dynamic(() => import("./ColorPath"), { ssr: false });
+ const LightBeams360 = dynamic(() => import("./LightBeams360"), { ssr: false });
 
 type PageProps = { params: Promise<{ level: string }> };
 
@@ -27,6 +28,8 @@ export default function Page({ params }: PageProps) {
   if (level === "7") return <GrayRabkin />;
   if (level === "8") return <LightBeamsDemo />;
   if (level === "9") return <ColorMixConnect />;
+  if (level === "10") return <LightBeams360 />;
+
 
   return notFound();
 }
