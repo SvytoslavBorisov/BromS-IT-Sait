@@ -18,4 +18,4 @@ export const FILTER_RADIUS_MAX = 0.055;
 export const PLACE_TRIES = 64;
 
 // Отступы от рамки поля (в процентах)
-export const BORDER_PAD_PCT = 0.06;
+export const BORDER_PAD_PCT = 0.03;

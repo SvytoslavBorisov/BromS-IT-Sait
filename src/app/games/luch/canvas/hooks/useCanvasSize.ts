@@ -11,14 +11,29 @@ export function useCanvasSize(
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
+
+    const update = () => {
       const r = el.getBoundingClientRect();
-      const w = Math.max(360, r.width);
-      const h = Math.max(360, Math.round(w / aspect));
+      const maxW = r.width;
+      const maxH = window.innerHeight - 100; // минус top + bottom бары
+      let w = maxW;
+      let h = Math.round(w / aspect);
+      if (h > maxH) {
+        h = maxH;
+        w = Math.round(h * aspect);
+      }
       setSize({ w, h });
-    });
+    };
+
+    const ro = new ResizeObserver(update);
     ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener("resize", update);
+    update();
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
   }, [wrapRef, aspect]);
 
   return size;

@@ -42,22 +42,31 @@ export type MirrorSpec = {        // описание зеркала в отно
   deg: number;
 };
 
-export type LevelGeometry = {
-  frameWallsPct: SegmentObj[];    // внешняя рамка
-  innerWallsPct: SegmentObj[];    // внутренние стены
-  filtersPct: CircleObj[];
-  goalPct: CircleObj;
-  decoysPct: CircleObj[];
-  srcPct: Vec;
+export type LevelGeometry = Readonly<{
+  srcPct: PctPoint;
   srcDeg: number;
-  mirrorsPct: MirrorSpec[];       // стартовые зеркала
-};
+
+  mirrorsPct: MirrorSpec[];
+  frameWallsPct: SegmentObj[];
+  innerWallsPct: SegmentObj[];
+
+  // окружности:
+  filtersPct: CircleObj[];
+  decoysPct: CircleObj[];
+  goalPct: CircleObj;
+}>;
+
 
 /**
  * Для совместимости с твоим импортом в levelGen.ts
  * (был импорт LevelSpec — экспонируем алиас)
  */
-export type LevelSpec = LevelGeometry;
+export type LevelSpec = Readonly<
+  LevelGeometry & {
+    seed: string;
+    difficulty: Difficulty;
+  }
+>;
 
 /** ===================== Инвентарь ===================== */
 export type InventoryItemKind = "reflector_short" | "reflector_long" | "reflector_arc";

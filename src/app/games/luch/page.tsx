@@ -3,7 +3,7 @@
 
 import dynamic from "next/dynamic";
 import React, { useMemo, useState } from "react";
-import StartMenu from "./StartMenu";
+import StartMenu from "./startmenu/StartMenu";
 
 const LightBeams360 = dynamic(() => import("./LightBeams360"), { ssr: false });
 
