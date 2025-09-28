@@ -2,17 +2,14 @@
 "use client";
 
 /**
- * Demo: Zero-Knowledge Protocol based on Graph Isomorphism (multi-round)
- * Next.js App Router page with beautiful animations and full graph6 support.
+ * Zero-Knowledge: Graph Isomorphism (multi-round)
+ * Чистый, спокойный UI без «неона». Карточки, светлый фон, понятные подписи.
  *
- * Requirements:
+ * Требуется:
  *   npm i framer-motion
- *   (Tailwind is optional but recommended; styles here are simple and degrade gracefully)
- *
- * Drop this file into your Next.js project and open /zk-gi.
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ProtocolPlayer } from "./ProtocolPlayer";
 import type { GIInstanceOptions } from "./types";
 
@@ -26,110 +23,131 @@ export default function Page() {
   });
 
   return (
-    <main className="min-h-screen w-full p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-100">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-6">
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-            Zero‑Knowledge: Graph Isomorphism (многораундовый)
+    <main className="min-h-screen bg-gray-50 text-gray-900">
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">
+            Zero-Knowledge: Graph Isomorphism (многораундовый)
           </h1>
-          <p className="text-slate-300 mt-2">
-            Демонстрация протокола: Prover доказывает знание изоморфизма между
-            графами <span className="font-mono">G₁</span> и{" "}
-            <span className="font-mono">G₂</span> без раскрытия секрета.
+          <p className="mt-2 text-gray-600">
+            Демонстрация протокола: Prover доказывает знание изоморфизма между графами{" "}
+            <span className="font-mono">G₁</span> и <span className="font-mono">G₂</span> без раскрытия секрета.
           </p>
-          <p className="text-emerald-300 mt-1">
-            Формат графов — <span className="font-mono">graph6</span> — да.
+          <p className="mt-1 text-gray-700">
+            Формат графов — <code className="font-mono">graph6</code>.
           </p>
         </header>
 
-        <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
-            <h2 className="font-semibold mb-3">Параметры инстанса</h2>
-            <form
-              className="grid grid-cols-2 gap-3 text-sm"
-              onSubmit={(e) => e.preventDefault()}
-            >
-              <label className="flex items-center gap-2">
-                <span>N вершин</span>
+        <section className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2">
+          {/* Карточка: Параметры */}
+          <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold">Параметры</h2>
+              <p className="text-sm text-gray-500">Задайте размер и «сложность» эксперимента</p>
+            </div>
+
+            <form className="p-4 grid grid-cols-2 gap-4 text-sm" onSubmit={(e) => e.preventDefault()}>
+              <div>
+                <label className="block text-gray-700 font-medium">N вершин</label>
                 <input
                   type="number"
                   min={4}
                   max={20}
                   value={opts.n}
-                  onChange={(e) =>
-                    setOpts((o) => ({ ...o, n: parseInt(e.target.value || "8") }))
-                  }
-                  className="w-20 rounded bg-slate-800 border border-slate-700 px-2 py-1"
+                  onChange={(e) => setOpts((o) => ({ ...o, n: parseInt(e.target.value || "8") }))}
+                  className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-800"
                 />
-              </label>
+              </div>
 
-              <label className="flex items-center gap-2">
-                <span>Раундов</span>
+              <div>
+                <label className="block text-gray-700 font-medium">Раундов</label>
                 <input
                   type="number"
                   min={1}
                   max={30}
                   value={opts.rounds}
-                  onChange={(e) =>
-                    setOpts((o) => ({ ...o, rounds: parseInt(e.target.value || "6") }))
-                  }
-                  className="w-20 rounded bg-slate-800 border border-slate-700 px-2 py-1"
+                  onChange={(e) => setOpts((o) => ({ ...o, rounds: parseInt(e.target.value || "6") }))}
+                  className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-800"
                 />
-              </label>
+              </div>
 
-              <label className="col-span-2 flex items-center gap-2">
-                <span>Плотность рёбер</span>
-                <input
-                  type="range"
-                  min={0.05}
-                  max={0.8}
-                  step={0.05}
-                  value={opts.density}
-                  onChange={(e) =>
-                    setOpts((o) => ({ ...o, density: parseFloat(e.target.value) }))
-                  }
-                  className="w-full"
-                />
-                <span className="tabular-nums w-16 text-right">
-                  {opts.density.toFixed(2)}
-                </span>
-              </label>
+              <div className="col-span-2">
+                <label className="block text-gray-700 font-medium">Плотность рёбер</label>
+                <div className="mt-1 flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0.05}
+                    max={0.8}
+                    step={0.05}
+                    value={opts.density}
+                    onChange={(e) => setOpts((o) => ({ ...o, density: parseFloat(e.target.value) }))}
+                    className="flex-1 accent-gray-800"
+                  />
+                  <span className="tabular-nums w-14 text-right text-gray-700">{opts.density.toFixed(2)}</span>
+                </div>
+              </div>
 
-              <label className="col-span-2 flex items-center gap-2">
-                <span>Seed</span>
-                <input
-                  value={opts.seed || ""}
-                  onChange={(e) => setOpts((o) => ({ ...o, seed: e.target.value }))}
-                  className="flex-1 rounded bg-slate-800 border border-slate-700 px-2 py-1"
-                />
-              </label>
+              <details className="col-span-2 rounded-lg bg-gray-50 border border-gray-200 p-3 open:bg-gray-50">
+                <summary className="cursor-pointer text-gray-700 font-medium select-none">
+                  Расширенные настройки
+                </summary>
+                <div className="mt-3 grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-gray-700 font-medium">Seed (для воспроизводимости)</label>
+                    <input
+                      value={opts.seed || ""}
+                      onChange={(e) => setOpts((o) => ({ ...o, seed: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-800"
+                    />
+                  </div>
 
-              <label className="col-span-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={opts.autoplay}
-                  onChange={(e) => setOpts((o) => ({ ...o, autoplay: e.target.checked }))}
-                />
-                <span>Автовоспроизведение</span>
-              </label>
+                  <label className="col-span-2 inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={opts.autoplay}
+                      onChange={(e) => setOpts((o) => ({ ...o, autoplay: e.target.checked }))}
+                      className="h-4 w-4"
+                    />
+                    <span className="text-gray-700">Автовоспроизведение шагов</span>
+                  </label>
+                </div>
+              </details>
             </form>
           </div>
 
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
-            <h2 className="font-semibold mb-3">Кратко о шагах</h2>
-            <ol className="list-decimal ml-5 space-y-2 text-sm text-slate-300">
-              <li><b>Commit.</b> Prover выбирает случайную перестановку σ и отправляет граф <i>H = σ(G₁)</i>.</li>
-              <li><b>Challenge.</b> Verifier выбирает случайный бит b ∈ {`{0,1}` }.</li>
-              <li><b>Response.</b> Если b=0 — раскрыть σ (изо H≅G₁); если b=1 — раскрыть σ∘π⁻¹ (изо H≅G₂).</li>
-              <li><b>Verify.</b> Проверяющий убеждается, что раскрытая перестановка действительно изоморфизм.</li>
-            </ol>
-            <p className="text-emerald-300 mt-1">
-              {"Вероятность обмана в одном раунде — 1/2; после k раундов — 2^{-k}."}
-            </p>
+          {/* Карточка: Кратко о шагах */}
+          <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold">Как работает протокол</h2>
+            </div>
+            <div className="p-4">
+              <ol className="list-decimal ml-5 space-y-2 text-sm text-gray-700">
+                <li>
+                  <b>Commit.</b> Prover выбирает случайную перестановку σ и отправляет граф <i>H = σ(G₁)</i>.
+                </li>
+                <li>
+                  <b>Challenge.</b> Verifier выбирает случайный бит b ∈ {"{0,1}"}.
+                </li>
+                <li>
+                  <b>Response.</b> Если b=0 — раскрыть σ (изо H≅G₁); если b=1 — раскрыть σ∘π⁻¹ (изо H≅G₂).
+                </li>
+                <li>
+                  <b>Verify.</b> Проверяющий убеждается, что раскрытая перестановка действительно изоморфизм.
+                </li>
+              </ol>
+              <p className="mt-3 text-sm text-gray-700">
+                {"Вероятность обмана в одном раунде — 1/2; после k раундов — 2^{-k}."}
+              </p>
+            </div>
           </div>
         </section>
 
+        {/* Основной плеер протокола (кнопки/графы/лог) */}
         <ProtocolPlayer opts={opts} />
+
+        <footer className="mt-8 text-xs text-gray-500">
+          Подсказка: одинаковый <i>seed</i> даёт одинаковые графы и π — удобно для отчёта.
+        </footer>
       </div>
     </main>
   );

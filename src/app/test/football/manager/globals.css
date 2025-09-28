@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light dark; }
+body { @apply bg-neutral-50 text-neutral-900; }
+.container { @apply max-w-6xl mx-auto px-4; }
+.card { @apply rounded-2xl border border-neutral-200 bg-white shadow-sm; }
+.h1 { @apply text-2xl font-semibold; }
+.h2 { @apply text-lg font-semibold; }
+.muted { @apply text-neutral-500; }

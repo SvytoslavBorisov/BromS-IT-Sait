@@ -1,23 +1,12 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
-
-
-//
-//   MODELS
-//
 
 model Account {
   id                 String  @id @default(cuid())
@@ -25,7 +14,7 @@ model Account {
   type               String
   provider           String
   providerAccountId  String
-  refresh_token      String? 
+  refresh_token      String?
   access_token       String?
   expires_at         Int?
   token_type         String?
@@ -34,11 +23,10 @@ model Account {
   session_state      String?
   oauth_token_secret String?
   oauth_token        String?
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("accounts")
   @@unique([provider, providerAccountId])
+  @@map("accounts")
 }
 
 model Session {
@@ -46,101 +34,88 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
 }
 
 model User {
-  id             String    @id @default(cuid())
-  name           String?
-  surname        String?    @default("")
-  patronymic     String?    @default("")
-  age            DateTime?  @default(now())
-  sex            Sex?       @default(MALE)
-  email          String    @unique
-  passwordHash   String
-  emailVerified  DateTime?
-  publicKey      Json?
-  image          String?
-  phone          String?
-  location       String?
-
-  shares         Share[]           @relation("UserShares")
-
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime?         @updatedAt
-
-  recoverySessions RecoverySession[] @relation("RecoveryDealer")
-  shareReceipts    ShareReceipt[]    @relation("ReceiptShareholder")
-  notification    Notification[]     @relation("userNotification")
-  sendReceipts    ShareReceipt[]     @relation("sendReceipts")
-  documents       Document[]         @relation("usersDocuments")
-  certifications       Certification[]         @relation("userCertificats")
-  documentSignSession       documentSignSession[]         @relation("documentSignSessionDealer")
-  signatures       Signatures[]         @relation("usersSignatures")
-  settings         UserSettings?         @relation()
-  companyId       String?   
-  company         Company?         @relation("userCompany", fields: [companyId], references: [id])
-  positionId      String?         
-  position        Position?    @relation("userPosition", fields: [positionId], references: [id])
-  departmentId      String?         
-  department        Department?    @relation("userDepartment", fields: [departmentId], references: [id])
-
-  accounts       Account[]
-  sessions       Session[]
-
-  managerId      String?            // ссылка на руководителя
-  manager        User?              @relation("UserHierarchy", fields: [managerId], references: [id])
-  reports        User[]             @relation("UserHierarchy")
-
-  messages      ChatMessage[]   @relation("userMessage")
-
+  id                     String                   @id @default(cuid())
+  name                   String?
+  surname                String?                  @default("")
+  patronymic             String?                  @default("")
+  age                    DateTime?                @default(now())
+  sex                    Sex?                     @default(MALE)
+  email                  String                   @unique
+  passwordHash           String
+  emailVerified          DateTime?
+  publicKey              Json?
+  image                  String?
+  phone                  String?
+  location               String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime?                @updatedAt
+  companyId              String?
+  positionId             String?
+  departmentId           String?
+  managerId              String?
   /// --- Telegram link ---
-  telegramId           String?   @unique            // user_id / chat_id из Telegram (храним как строку для совместимости)
-  telegramUsername     String?                      // @username (не уникален, может меняться)
-  telegramLinkedAt     DateTime?                    // когда привязали аккаунт
-  telegramAllowsWrite  Boolean    @default(false)   // согласие "Allow to message" (Login Widget/WebApp)
-  telegramPhotoUrl     String?                      // аватар (если нужен в UI)
-  telegramLanguageCode String?                      // например "ru" / "en"
-  telegramLastAuthAt   DateTime?                    // время последней успешной валидации hash/initData
+  telegramId             String?                  @unique
+  telegramUsername       String?
+  telegramLinkedAt       DateTime?
+  telegramAllowsWrite    Boolean                  @default(false)
+  telegramPhotoUrl       String?
+  telegramLanguageCode   String?
+  telegramLastAuthAt     DateTime?
+  /// Публичный E2E-ключ транспорта (для шифрования долей мне)
+  e2ePublicKey           String?                  @unique
+  e2ePublicKeyAlg        String                   @default("ECIES-GOST-2012-256")
+  certifications         Certification[]          @relation("userCertificats")
+  messages               ChatMessage[]            @relation("userMessage")
+  dkgCommitments         DkgCommitment[]
+  dkgComplaintsAsAccused DkgComplaint[]           @relation("complaintsAccused")
+  dkgComplaintsAsAccuser DkgComplaint[]           @relation("complaintsAccuser")
+  dkgParticipants        DkgParticipant[]
+  dkgReadiness           DkgReady[]
+  DkgRecoveryParticipant DkgRecoveryParticipant[] @relation("DkgRecoveryParticipantUser")
+  DkgRecoverySession     DkgRecoverySession[]     @relation("DkgRecoverySessionUser")
+  DkgRecoveryShare       DkgRecoveryShare[]       @relation("DkgRecoveryShareUser")
+  dkgSessionsCreated     DkgSession[]             @relation("DkgSessionCreatedBy")
+  dkgSharesFrom          DkgShareOutbox[]         @relation("dkgSharesFrom")
+  dkgSharesTo            DkgShareOutbox[]         @relation("dkgSharesTo")
+  notification           Notification[]           @relation("userNotification")
+  recoverySessions       RecoverySession[]        @relation("RecoveryDealer")
+  shares                 Share[]                  @relation("UserShares")
+  sendReceipts           ShareReceipt[]           @relation("sendReceipts")
+  shareReceipts          ShareReceipt[]           @relation("ReceiptShareholder")
+  signatures             Signatures[]             @relation("usersSignatures")
+  company                Company?                 @relation("userCompany", fields: [companyId], references: [id])
+  department             Department?              @relation("userDepartment", fields: [departmentId], references: [id])
+  manager                User?                    @relation("UserHierarchy", fields: [managerId], references: [id])
+  reports                User[]                   @relation("UserHierarchy")
+  position               Position?                @relation("userPosition", fields: [positionId], references: [id])
+  settings               UserSettings?
+  accounts               Account[]
+  documentSignSession    documentSignSession[]    @relation("documentSignSessionDealer")
+  documents              Document[]               @relation("usersDocuments")
+  sessions               Session[]
 
   @@index([telegramUsername])
-
-
-    /// Публичный E2E-ключ транспорта (для шифрования долей мне)
-  e2ePublicKey    String?  @unique
-  e2ePublicKeyAlg String   @default("ECIES-GOST-2012-256") // или что фактически используешь
-
-  // Dealerless DKG
-  dkgParticipants  DkgParticipant[]
-  dkgCommitments   DkgCommitment[]
-  dkgSharesFrom    DkgShareOutbox[]  @relation("dkgSharesFrom")
-  dkgSharesTo      DkgShareOutbox[]  @relation("dkgSharesTo")
-  dkgReadiness     DkgReady[]
-  dkgComplaintsAsAccuser DkgComplaint[] @relation("complaintsAccuser")
-  dkgComplaintsAsAccused DkgComplaint[] @relation("complaintsAccused")
-   dkgSessionsCreated       DkgSession[]     @relation("DkgSessionCreatedBy")
-   DkgRecoveryShare       DkgRecoveryShare[]     @relation("DkgRecoveryShareUser")
-   DkgRecoveryParticipant DkgRecoveryParticipant[] @relation("DkgRecoveryParticipantUser")
-   DkgRecoverySession DkgRecoverySession[] @relation("DkgRecoverySessionUser")
 }
 
 model UserSettings {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id])
-
-  twoFactorEnabled Boolean  @default(false)
-  notifyByEmail    Boolean  @default(true)
-  notifyByTelegram Boolean  @default(false)
-  logRetentionDays Int      @default(30)
-  autoSessionLogout Int     @default(15)   // минут
-  darkMode         Boolean  @default(false)
-  language         String   @default("ru")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  userId            String   @unique
+  autoSessionLogout Int      @default(15)
+  createdAt         DateTime @default(now())
+  darkMode          Boolean  @default(false)
+  id                String   @id @default(cuid())
+  language          String   @default("ru")
+  logRetentionDays  Int      @default(30)
+  notifyByEmail     Boolean  @default(true)
+  notifyByTelegram  Boolean  @default(false)
+  twoFactorEnabled  Boolean  @default(false)
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id])
 }
 
 model VerificationToken {
@@ -148,423 +123,426 @@ model VerificationToken {
   token      String   @unique
   expires    DateTime
 
-  @@map("verification_tokens")
   @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
 model ShamirSession {
-  id          String    @id @default(cuid())
-  title       String?
+  id          String              @id @default(cuid())
   dealerId    String
-  p           String    @default("")        // пустая строка
-  q           String    @default("")
-  g           String    @default("")
-  commitments Json      @default("[]")      // пустой JSON-массив
   threshold   Int
-  createdAt   DateTime  @default(now())
-  status      String    @default("")
-
+  createdAt   DateTime            @default(now())
+  commitments Json                @default("[]")
+  g           String              @default("")
+  p           String              @default("")
+  q           String              @default("")
+  status      String              @default("")
+  title       String?
   type        ShamirSessionStatus @default(CUSTOM)
-  publicKey   AsymmetricKey? @relation("asymmetricShareSession")
-  shares      Share[]   @relation("SessionShares")
+  publicKey   AsymmetricKey?      @relation("asymmetricShareSession")
   recoveries  RecoverySession[]
-  signatures          Signatures[]         @relation("shamirSessionSignatures")
+  shares      Share[]             @relation("SessionShares")
+  signatures  Signatures[]        @relation("shamirSessionSignatures")
 }
 
 model Share {
-  id                    Int             @id @default(autoincrement())
-  sessionId             String          @default("")
-  userId                String
-  x                     String
-  ciphertext            Json
-  createdAt             DateTime        @default(now())
-
-  // ── Новые поля ────────────────────────────────────────────────────────────
-
-  /// Статус доли (по умолчанию ACTIVE)
-  status                ShareStatus     @default(ACTIVE)
-
+  id                  Int            @id @default(autoincrement())
+  userId              String
+  x                   String
+  ciphertext          Json
+  createdAt           DateTime       @default(now())
+  sessionId           String         @default("")
   /// Произвольный комментарий
-  comment               String          @default("")
-
+  comment             String         @default("")
   /// Алгоритм шифрования, которым шифровали эту долю
-  encryptionAlgorithm   String          @default("RSA-OAEP-SHA256")
-
+  encryptionAlgorithm String         @default("RSA-OAEP-SHA256")
   /// Время истечения доли; `null` = неограниченно
-  expiresAt             DateTime?       
-
-  // ── Отношения и индексы ────────────────────────────────────────────────────
-
-  session               ShamirSession   @relation("SessionShares", fields: [sessionId], references: [id])
-  user                  User            @relation("UserShares",    fields: [userId],    references: [id])
-
-  receipts      ShareReceipt[]    
+  expiresAt           DateTime?
+  /// Статус доли (по умолчанию ACTIVE)
+  status              ShareStatus    @default(ACTIVE)
+  session             ShamirSession  @relation("SessionShares", fields: [sessionId], references: [id])
+  user                User           @relation("UserShares", fields: [userId], references: [id])
+  receipts            ShareReceipt[]
 
   @@unique([sessionId, userId], name: "Share_sessionId_userId")
 }
 
 model AsymmetricKey {
   /// Уникальный идентификатор записи
-  id                   String          @id @default(uuid())
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
-
+  id                  String                @id @default(uuid())
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
   /// Ссылка на сессию разделения приватного ключа
-  privateKeySharingId  String         @unique
-  privateKeySharing    ShamirSession  @relation("asymmetricShareSession", fields: [privateKeySharingId], references: [id])
-
-  publicKey            String         @unique
-
+  privateKeySharingId String                @unique
   /// Параметры эллиптической кривой / поля
-  p                    String          // простое число модуля поля
-  a                    String          // коэффициент a кривой
-  b                    String          // коэффициент b кривой
-  q                    String          // порядок группы точек ЭК
-
+  p                   String
+  a                   String
+  b                   String
+  q                   String
   /// Генератор G = (xp, yp)
-  xp                   String
-  yp                   String
-
+  xp                  String
+  yp                  String
   /// Публичный ключ Q = d·G
-  Q                    String
-
-  certification       Certification?   @relation("asymmetricKeyCertificate")
-  documentSigns documentSignSession[] @relation("publicKeyOfdocumentSign")
+  Q                   String
+  publicKey           String                @unique
+  privateKeySharing   ShamirSession         @relation("asymmetricShareSession", fields: [privateKeySharingId], references: [id])
+  certification       Certification?        @relation("asymmetricKeyCertificate")
+  documentSigns       documentSignSession[] @relation("publicKeyOfdocumentSign")
 }
 
 model RecoverySession {
-  id              String   @id @default(cuid())
-  dealerId        String
-  dealer          User         @relation("RecoveryDealer", fields:[dealerId], references:[id])
-
-  shareSessionId  String
-  shareSession    ShamirSession @relation(fields:[shareSessionId], references:[id])
-
-  documentSignSession    documentSignSession[]    @relation("documentSignSessionRecovery")
-
-  status      RecoveryStatus @default(PENDING)
-  createdAt   DateTime       @default(now())
-  finishedAt  DateTime?
-
-  receipts    ShareReceipt[]
+  id                  String               @id @default(cuid())
+  dealerId            String
+  shareSessionId      String
+  status              RecoveryStatus       @default(PENDING)
+  createdAt           DateTime             @default(now())
+  finishedAt          DateTime?
+  dealer              User                 @relation("RecoveryDealer", fields: [dealerId], references: [id])
+  shareSession        ShamirSession        @relation(fields: [shareSessionId], references: [id])
+  receipts            ShareReceipt[]
+  documentSignSession documentSignSession? @relation("documentSignSessionRecovery")
 }
 
 model ShareReceipt {
-  id             String   @id @default(cuid())
+  id             String          @id @default(cuid())
   recoveryId     String
-  recovery       RecoverySession @relation(fields:[recoveryId], references:[id])
-
   shareholderId  String
-  shareholder    User            @relation("ReceiptShareholder", fields:[shareholderId], references:[id])
-
-  shareSessionId String  
-  share          Share           @relation(fields: [shareSessionId, shareholderId], references: [sessionId, userId])
-
+  ciphertext     Json            @default("[]")
+  receivedAt     DateTime        @default(now())
+  shareSessionId String
+  senderId       String
   status         String
-  senderId       String  
-  sender         User           @relation("sendReceipts", fields: [senderId], references: [id])
-
-  ciphertext     Json @default("[]")
-  receivedAt     DateTime @default(now())
+  recovery       RecoverySession @relation(fields: [recoveryId], references: [id])
+  sender         User            @relation("sendReceipts", fields: [senderId], references: [id])
+  share          Share           @relation(fields: [shareSessionId, shareholderId], references: [sessionId, userId])
+  shareholder    User            @relation("ReceiptShareholder", fields: [shareholderId], references: [id])
 }
 
 model Notification {
-  id          String    @id @default(cuid())
-  userId      String
-  type        String    // e.g. "recover_secret", "message", "alert"
-  payload     Json      // любые данные, связанные с уведомлением
-  isRead      Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-
-  user        User      @relation("userNotification", fields: [userId], references: [id])
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  payload   Json
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation("userNotification", fields: [userId], references: [id])
 }
 
 model Document {
   /// Уникальный идентификатор документа
-  id          String    @id @default(cuid())
-
+  id                  String                @id @default(cuid())
   /// Кем загружен
-  userId      String
-  user        User      @relation("usersDocuments", fields: [userId], references: [id], onDelete: Cascade)
-
+  userId              String
   /// Оригинальное имя файла
-  fileName    String
-
+  fileName            String
   /// MIME-тип (например, "application/pdf")
-  fileType    String
-
+  fileType            String
   /// Размер в байтах
-  fileSize    Int
-
+  fileSize            Int
   /// Где хранится на сервере (абсолютный или относительный путь)
-  filePath    String
-
+  filePath            String
   /// Произвольное описание или теги
-  description String?   @default("")
-
+  description         String?               @default("")
   /// Дополнительные метаданные (например, превью, EXIF, checksum и т.п.)
-  metadata    Json?    @default("{}")
-
+  metadata            Json?                 @default("{}")
   /// Когда загрузили
-  createdAt   DateTime @default(now())
-
+  createdAt           DateTime              @default(now())
   /// Когда последний раз обновляли (если нужно)
-  updatedAt   DateTime @updatedAt
+  updatedAt           DateTime              @updatedAt
+  type                DocumentStatus?       @default(NOTECRYPT)
+  documentSignatures  Signatures[]          @relation("documentIdSignatures")
+  documentSignSession documentSignSession[] @relation("documentIdSignSession")
+  user                User                  @relation("usersDocuments", fields: [userId], references: [id], onDelete: Cascade)
 
-  type        DocumentStatus? @default(NOTECRYPT)
-
-  documentSignSession    documentSignSession[]    @relation("documentIdSignSession")
-  documentSignatures     Signatures[]    @relation("documentIdSignatures")
-
-  @@map("documents")
   @@index([userId, createdAt])
+  @@map("documents")
 }
 
 model documentSignSession {
-  id          String    @id @default(cuid())
-  dealerId        String
-  dealer          User         @relation("documentSignSessionDealer", fields:[dealerId], references:[id])
-
-  hash String?
-
+  id          String          @id @default(cuid())
+  dealerId    String
+  hash        String?
+  documentId  String
+  status      RecoveryStatus  @default(PENDING)
+  recoveryId  String          @unique
   publicKeyId String?
-  publicKey  AsymmetricKey?         @relation("publicKeyOfdocumentSign", fields:[publicKeyId], references:[id])
-  r String?  @default("")
-  s String?  @default("")
-
-  documentId        String
-  document          Document         @relation("documentIdSignSession", fields:[documentId], references:[id])
-
-  status RecoveryStatus @default(PENDING)
-  recoveryId String @unique
-  recovery RecoverySession @relation("documentSignSessionRecovery", fields:[recoveryId], references:[id])
+  r           String?         @default("")
+  s           String?         @default("")
+  dealer      User            @relation("documentSignSessionDealer", fields: [dealerId], references: [id])
+  document    Document        @relation("documentIdSignSession", fields: [documentId], references: [id])
+  publicKey   AsymmetricKey?  @relation("publicKeyOfdocumentSign", fields: [publicKeyId], references: [id])
+  recovery    RecoverySession @relation("documentSignSessionRecovery", fields: [recoveryId], references: [id])
 }
 
 model Signatures {
-  id          String    @id @default(cuid())
-  filePath    String?     // если присоединенная то храним как файла
-  pem         String?
-  type        String
-
-  path        String?
-
-  documentId        String?
-  document          Document?         @relation("documentIdSignatures", fields:[documentId], references:[id])
-
-  userId      String
-  user        User      @relation("usersSignatures", fields: [userId], references: [id])
-
-  shamirSessionId        String?
-  shamirSession          ShamirSession?         @relation("shamirSessionSignatures", fields:[shamirSessionId], references:[id])
+  id              String         @id @default(cuid())
+  documentId      String?
+  userId          String
+  filePath        String?
+  pem             String?
+  shamirSessionId String?
+  type            String
+  path            String?
+  document        Document?      @relation("documentIdSignatures", fields: [documentId], references: [id])
+  shamirSession   ShamirSession? @relation("shamirSessionSignatures", fields: [shamirSessionId], references: [id])
+  user            User           @relation("usersSignatures", fields: [userId], references: [id])
 }
 
 model Company {
-  id          String    @id @default(cuid())
-  title       String    @default("Компания")
-  email       String    @unique
+  id          String       @id @default(cuid())
+  title       String       @default("Компания")
+  email       String       @unique
   image       String?
-
-  user        User[]    @relation("userCompany")
-  positions   Position[]  @relation("companyPositions")
-  departments   Department[]  @relation("departmentCompany")
+  departments Department[] @relation("departmentCompany")
+  positions   Position[]   @relation("companyPositions")
+  user        User[]       @relation("userCompany")
 }
 
 model Department {
-  id          String    @id @default(cuid())
-  title       String    @default("Отдел")
-  email       String    @unique
-
-  user        User[]    @relation("userDepartment")
-  companyId   String
-  company     Company   @relation("departmentCompany", fields: [companyId], references: [id])
+  id        String  @id @default(cuid())
+  title     String  @default("Отдел")
+  email     String  @unique
+  companyId String
+  company   Company @relation("departmentCompany", fields: [companyId], references: [id])
+  user      User[]  @relation("userDepartment")
 }
 
 model Position {
-  id          String    @id @default(cuid())
-  title       String    @default("Должность")
-  
-  companyId   String
-  company     Company   @relation("companyPositions", fields: [companyId], references: [id])
-
-  user        User[]    @relation("userPosition")
-
-  rank        Int       @default(100)
+  id        String  @id @default(cuid())
+  title     String  @default("Должность")
+  companyId String
+  rank      Int     @default(100)
+  company   Company @relation("companyPositions", fields: [companyId], references: [id])
+  user      User[]  @relation("userPosition")
 }
 
 model Certification {
-  id          String    @id @default(cuid())
-  title       String    @default("Сертификат")
-
-  ownerId     String
-  owner       User   @relation("userCertificats", fields: [ownerId], references: [id])
-
-  pem         String
-
-  asymmetricKeyId     String? @unique
-  asymmetricKey       AsymmetricKey?   @relation("asymmetricKeyCertificate", fields: [asymmetricKeyId], references: [id])
-
-    /// Когда загрузили
-  createdAt   DateTime @default(now())
-
+  id              String         @id @default(cuid())
+  title           String         @default("Сертификат")
+  ownerId         String
+  asymmetricKeyId String?        @unique
+  pem             String
+  /// Когда загрузили
+  createdAt       DateTime       @default(now())
   /// Когда последний раз обновляли (если нужно)
-  updatedAt   DateTime @updatedAt
+  updatedAt       DateTime       @updatedAt
+  asymmetricKey   AsymmetricKey? @relation("asymmetricKeyCertificate", fields: [asymmetricKeyId], references: [id])
+  owner           User           @relation("userCertificats", fields: [ownerId], references: [id])
 }
 
 model ChatMessage {
-  id        String   @id @default(cuid())
-  room      String
-  text      String
-  userId    String
-  user      User   @relation("userMessage", fields: [userId], references: [id])
-  ts        DateTime @default(now())
-  // @@index([room, ts])
+  id     String   @id @default(cuid())
+  room   String
+  text   String
+  userId String
+  ts     DateTime @default(now())
+  user   User     @relation("userMessage", fields: [userId], references: [id])
 }
 
-
 model DkgSession {
-  id          String           @id @default(cuid())
-  title       String?          @default("")
-  n           Int
-  t           Int
-  epoch       String           @default("2025Q3")
-  status      DkgSessionStatus @default(LOBBY)
-
-  createdById String?
-  createdBy   User? @relation("DkgSessionCreatedBy", fields: [createdById], references: [id])
-
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-
-  participants  DkgParticipant[]
-  commitments   DkgCommitment[]
-  shares        DkgShareOutbox[]
-  readiness     DkgReady[]
-  complaints    DkgComplaint[]
-
+  id                 String               @id @default(cuid())
+  title              String?              @default("")
+  n                  Int
+  t                  Int
+  epoch              String               @default("2025Q3")
+  status             DkgSessionStatus     @default(LOBBY)
+  createdById        String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  commitments        DkgCommitment[]
+  complaints         DkgComplaint[]
+  participants       DkgParticipant[]
+  readiness          DkgReady[]
   DkgRecoverySession DkgRecoverySession[] @relation("DkgRecoverySessionDkgSession")
+  createdBy          User?                @relation("DkgSessionCreatedBy", fields: [createdById], references: [id])
+  shares             DkgShareOutbox[]
 
   @@index([status, createdAt])
 }
 
 model DkgParticipant {
-  id         String     @id @default(cuid())
-  sessionId  String
-  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  userId     String
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // дублируем на момент входа — чтобы участник мог поменять ключ позже, а сессия осталась консистентной
+  id              String     @id @default(cuid())
+  sessionId       String
+  userId          String
   e2ePublicKey    String
-  e2ePublicKeyAlg String   @default("ECIES-GOST-2012-256")
-
-  isHost     Boolean    @default(false)
-  joinedAt   DateTime   @default(now())
-  leftAt     DateTime?
+  e2ePublicKeyAlg String     @default("ECIES-GOST-2012-256")
+  isHost          Boolean    @default(false)
+  joinedAt        DateTime   @default(now())
+  leftAt          DateTime?
+  session         DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, userId])
   @@index([sessionId])
 }
 
 model DkgCommitment {
-  id         String     @id @default(cuid())
-  sessionId  String
-  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  fromUserId String
-  fromUser   User       @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
-
-  // массив точек C_k = a_k*G (храним как JSON: [{x:"hex", y:"hex"}, ...])
-  commitments Json
-  // опционально: хеш сериализации коммитментов, чтобы быстро сверять
+  id              String     @id @default(cuid())
+  sessionId       String
+  fromUserId      String
+  commitments     Json
   commitmentsHash String
+  signature       String
+  createdAt       DateTime   @default(now())
+  fromUser        User       @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
+  session         DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  // подпись отправителя коммитментов (формат на твоё усмотрение: hex/base64)
-  signature  String
-
-  createdAt  DateTime   @default(now())
-
-  @@unique([sessionId, fromUserId]) // один набор на участника в сессии
+  @@unique([sessionId, fromUserId])
   @@index([sessionId])
 }
 
 model DkgShareOutbox {
-  id         String     @id @default(cuid())
-  sessionId  String
-  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  fromUserId String
-  fromUser   User       @relation("dkgSharesFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-
-  toUserId   String
-  toUser     User       @relation("dkgSharesTo", fields: [toUserId], references: [id], onDelete: Cascade)
-
-  // шифртекст персональной доли s_{from->to} (ECIES на e2ePublicKey получателя)
-  ciphertext Bytes
-  // AAD/transcript hash, чтобы исключить replay между сессиями
+  id             String           @id @default(cuid())
+  sessionId      String
+  fromUserId     String
+  toUserId       String
+  ciphertext     Bytes
   transcriptHash String
+  signature      String
+  status         DkgShareDelivery @default(SENT)
+  createdAt      DateTime         @default(now())
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  fromUser       User             @relation("dkgSharesFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  session        DkgSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  toUser         User             @relation("dkgSharesTo", fields: [toUserId], references: [id], onDelete: Cascade)
 
-  // подпись метаданных отправителем (identity-подпись)
-  signature  String
-
-  status     DkgShareDelivery @default(SENT)
-  createdAt  DateTime         @default(now())
-  deliveredAt DateTime?
-  readAt     DateTime?
-
-  @@unique([sessionId, fromUserId, toUserId]) // не дублируем
+  @@unique([sessionId, fromUserId, toUserId])
   @@index([sessionId, toUserId, status])
 }
 
 model DkgReady {
-  id         String     @id @default(cuid())
-  sessionId  String
-  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  userId     String
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // хеш публичного ключа Q (например, H(ser(Q)))
-  Qhash      String
-
-  // опционально: хеш всего транскрипта (для аудита)
+  id             String     @id @default(cuid())
+  sessionId      String
+  userId         String
+  Qhash          String
   transcriptHash String
-
-  createdAt  DateTime   @default(now())
+  createdAt      DateTime   @default(now())
+  session        DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, userId])
   @@index([sessionId])
 }
 
 model DkgComplaint {
-  id         String     @id @default(cuid())
+  id         String             @id @default(cuid())
   sessionId  String
-  session    DkgSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  // кто жалуется и на кого
   accuserId  String
-  accuser    User       @relation("complaintsAccuser", fields: [accuserId], references: [id], onDelete: Cascade)
-
   accusedId  String
-  accused    User       @relation("complaintsAccused", fields: [accusedId], references: [id], onDelete: Cascade)
-
-  // произвольное описание/тип
-  reason     String      @default("")
-
-  // полезная нагрузка (например: раскрытая спорная доля, индексы, пруфы)
+  reason     String             @default("")
   payload    Json
-
   status     DkgComplaintStatus @default(OPEN)
   createdAt  DateTime           @default(now())
   resolvedAt DateTime?
+  accused    User               @relation("complaintsAccused", fields: [accusedId], references: [id], onDelete: Cascade)
+  accuser    User               @relation("complaintsAccuser", fields: [accuserId], references: [id], onDelete: Cascade)
+  session    DkgSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, status])
 }
 
+model DkgRecoverySession {
+  id               String                   @id @default(cuid())
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  sourceSessionId  String
+  qHash            String
+  n                Int
+  t                Int
+  epoch            String
+  requesterUserId  String
+  requesterPubKey  String
+  status           DkgRecoveryStatus        @default(OPEN)
+  resultCiphertext String?
+  resultMeta       String?
+  participants     DkgRecoveryParticipant[]
+  requester        User                     @relation("DkgRecoverySessionUser", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  sourceSession    DkgSession               @relation("DkgRecoverySessionDkgSession", fields: [sourceSessionId], references: [id], onDelete: Cascade)
+  shares           DkgRecoveryShare[]
 
-//
-//   ENUMS
-//
+  @@index([sourceSessionId, status, createdAt])
+}
+
+model DkgRecoveryParticipant {
+  id           String             @id @default(cuid())
+  joinedAt     DateTime           @default(now())
+  recoveryId   String
+  userId       String
+  e2ePublicKey String?
+  recovery     DkgRecoverySession @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
+  user         User               @relation("DkgRecoveryParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([recoveryId, userId])
+  @@index([recoveryId])
+}
+
+model DkgRecoveryShare {
+  id         String             @id @default(cuid())
+  createdAt  DateTime           @default(now())
+  recoveryId String
+  fromUserId String
+  s_i_hex    String
+  proofOk    Boolean            @default(false)
+  note       String             @default("")
+  fromUser   User               @relation("DkgRecoveryShareUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+  recovery   DkgRecoverySession @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
+
+  @@unique([recoveryId, fromUserId])
+  @@index([recoveryId])
+}
+
+model players_fifa {
+  playerId       BigInt   @id @map("player_id")
+  age            Float?
+  date_of_birth  String?
+  first_name     String?
+
+  // внешний ключ может быть пустым, поэтому Int?
+  teamId         Int?     @map("team_id")
+  team           teams?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  shirt_number    BigInt?
+  position        String?
+  full_name       String?
+  last_name       String?
+  fifa_goals      BigInt?
+  fifa_physic     BigInt?
+  height          BigInt?
+  gk_skill        BigInt?
+  rb_skill        BigInt?
+  cb_skill        BigInt?
+  lb_skill        BigInt?
+  rwb_skill       BigInt?
+  dm_skill        BigInt?
+  lwb_skill       BigInt?
+  rm_skill        BigInt?
+  cm_skill        BigInt?
+  lm_skill        BigInt?
+  rw_skill        BigInt?
+  am_skill        BigInt?
+  lw_skill        BigInt?
+  st_skill        BigInt?
+  stamina         BigInt?
+  defending       BigInt?
+  shooting        BigInt?
+  pass            BigInt?
+  goalkeeper_save BigInt?
+
+  @@map("players_fifa")
+}
+
+model teams {
+  id    Int      @id @default(autoincrement())
+  title String?
+  liga  BigInt?
+
+  squad players_fifa[]
+
+  @@map("teams")
+}
+
+
 
 enum RecoveryStatus {
   PENDING
@@ -576,7 +554,6 @@ enum ShareStatus {
   ACTIVE
   USED
   EXPIRED
-  // при необходимости можно добавить и другие состояния
 }
 
 enum DocumentStatus {
@@ -595,12 +572,12 @@ enum Sex {
 }
 
 enum DkgSessionStatus {
-  LOBBY    // лобби: ждём N из N
-  ROUND1   // публикация коммитментов
-  ROUND2   // обмен зашифрованными долями
-  ROUND3   // проверка и финал
-  FINAL    // завершено успешно
-  ABORTED  // остановлено/оспорено
+  LOBBY
+  ROUND1
+  ROUND2
+  ROUND3
+  FINAL
+  ABORTED
 }
 
 enum DkgShareDelivery {
@@ -623,69 +600,7 @@ enum DkgRecoveryStatus {
   FAILED
 }
 
-model DkgRecoverySession {
-  id               String            @id @default(cuid())
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-
-  // источник — исходная DKG-сессия
-  sourceSessionId  String
-  sourceSession    DkgSession        @relation("DkgRecoverySessionDkgSession", fields: [sourceSessionId], references: [id], onDelete: Cascade)
-
-  // инварианты/контекст для связывания
-  qHash            String            // H(ser(Q)) из исходной сессии
-  n                Int
-  t                Int
-  epoch            String
-
-  // кто запросил восстановление (кому отдадим зашифрованный результат)
-  requesterUserId  String
-  requester        User              @relation("DkgRecoverySessionUser", fields: [requesterUserId], references: [id], onDelete: Cascade)
-  requesterPubKey  String            // hex; ECIES-ключ транспорта
-
-  status           DkgRecoveryStatus @default(OPEN)
-
-  // финальный результат (только зашифрованный артефакт)
-  resultCiphertext String?
-  resultMeta       String?
-
-  participants     DkgRecoveryParticipant[]
-  shares           DkgRecoveryShare[]
-
-  @@index([sourceSessionId, status, createdAt])
-}
-
-model DkgRecoveryParticipant {
-  id          String             @id @default(cuid())
-  joinedAt    DateTime           @default(now())
-
-  recoveryId  String
-  recovery    DkgRecoverySession @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
-
-  userId      String
-  user        User               @relation("DkgRecoveryParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
-
-  e2ePublicKey String?           // для удобства (дублируем, как в DkgParticipant)
-
-  @@unique([recoveryId, userId])
-  @@index([recoveryId])
-}
-
-model DkgRecoveryShare {
-  id          String             @id @default(cuid())
-  createdAt   DateTime           @default(now())
-
-  recoveryId  String
-  recovery    DkgRecoverySession @relation(fields: [recoveryId], references: [id], onDelete: Cascade)
-
-  fromUserId  String
-  fromUser    User               @relation("DkgRecoveryShareUser", fields: [fromUserId], references: [id], onDelete: Cascade)
-
-  // итоговая доля sᵢ участника i (hex, BE). Проверяем по агрегированным коммитментам.
-  s_i_hex     String
-  proofOk     Boolean            @default(false)
-  note        String             @default("")
-
-  @@unique([recoveryId, fromUserId])
-  @@index([recoveryId])
+enum MatchStatus {
+  scheduled
+  finished
 }

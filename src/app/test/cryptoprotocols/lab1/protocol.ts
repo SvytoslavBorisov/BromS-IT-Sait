@@ -63,6 +63,7 @@ export function createEngine(inst: GIInstance): ProtocolEngine {
   let sigma: Perm | null = null;
   let responsePerm: Perm | null = null;
   let b: 0 | 1 | null = null;
+  let lastAccepted: boolean | null = true;
   const stats = { accepted: 0, rejected: 0, completed: 0 };
 
   function step(): RoundEvent | null {
@@ -98,6 +99,7 @@ export function createEngine(inst: GIInstance): ProtocolEngine {
       const target = b === 0 ? inst.G1 : inst.G2;
       const lhs = applyPermToAdj(target, responsePerm);
       const ok = equalAdj(lhs, H);
+      lastAccepted = ok; // сохраняем
       if (ok) {
         stats.accepted++;
       } else {
@@ -132,7 +134,7 @@ export function createEngine(inst: GIInstance): ProtocolEngine {
       sigma,
       responsePerm,
       b,
-      accepted: null, // not used externally per-step
+      accepted: lastAccepted,
       stats,
     }),
   };
