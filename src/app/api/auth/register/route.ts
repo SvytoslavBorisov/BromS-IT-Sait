@@ -45,7 +45,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Проверка существования
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json(

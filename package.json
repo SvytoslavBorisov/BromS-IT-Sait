@@ -88,6 +88,7 @@
     "shamirs-secret-sharing": "^2.0.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
+    "stream-chain": "^3.4.0",
     "stream-json": "^1.9.1",
     "supertest": "^7.1.4",
     "telegraf": "^4.16.3",

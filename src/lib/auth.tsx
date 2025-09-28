@@ -7,7 +7,7 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcrypt";
 import YandexProvider from "next-auth/providers/yandex";
 
-// ⬇️ новый логгер
+
 import { logger, ensureRequestId } from "@/lib/logger";
 
 export async function getCurrentUser() {
@@ -27,11 +27,10 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      // В V4 authorize имеет сигнатуру (credentials, req)
+
       async authorize(credentials, req) {
         const t0 = Date.now();
 
-        // Собираем метаданные запроса
         const requestId = ensureRequestId(
           req?.headers?.get?.("x-request-id") ?? (req as any)?.headers?.["x-request-id"]
         );
@@ -61,9 +60,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // ВАЖНО: пароль не логируем
         const email = String(credentials.email).trim().toLowerCase();
-
 
         const user = await prisma.user.findUnique({
           where: { email },
@@ -165,9 +162,9 @@ export const authOptions: NextAuthOptions = {
       session.user = { ...session.user, id: token.sub! };
       return session;
     },
-    // Если хочешь логировать выдачу сессии/JWT, можно так:
+
     async jwt({ token, user, trigger }) {
-      // trigger === 'signIn' при успешном логине
+
       if (trigger === "signIn" && user) {
         const authLog = logger.child({ module: "auth/jwt" });
         authLog.debug({

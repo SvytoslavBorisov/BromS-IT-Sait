@@ -28,25 +28,21 @@ async function generateKeyPair() {
 export function useRegister() {
   const router = useRouter();
 
-  // базовые
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
 
-  // расширенные
   const [surname, setSurname] = useState("");
   const [patronymic, setPatronymic] = useState("");
-  const [age, setAge] = useState(""); // YYYY-MM-DD
+  const [age, setAge] = useState("");
   const [sex, setSex] = useState<Sex>("MALE");
   const [image, setImage] = useState("");
 
-  // орг-структура (значения)
   const [companyId, setCompanyId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [positionId, setPositionId] = useState("");
   const [managerId, setManagerId] = useState("");
 
-  // справочники
   const [companies, setCompanies] = useState<Company[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -55,7 +51,6 @@ export function useRegister() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // первоначальная загрузка
   useEffect(() => {
     (async () => {
       try {
@@ -73,7 +68,6 @@ export function useRegister() {
     })();
   }, []);
 
-  // загрузка по выбранной компании
   useEffect(() => {
     if (!companyId) {
       setDepartments([]); setPositions([]); setManagers([]);
@@ -98,7 +92,6 @@ export function useRegister() {
     })();
   }, [companyId]);
 
-  // фильтрация менеджеров по отделу
   useEffect(() => {
     if (!companyId) return;
     (async () => {
@@ -169,16 +162,15 @@ export function useRegister() {
   };
 
   return {
-    // значения
     email, setEmail, password, setPassword, name, setName,
     surname, setSurname, patronymic, setPatronymic, age, setAge,
     sex, setSex, image, setImage,
     companyId, setCompanyId, departmentId, setDepartmentId,
     positionId, setPositionId, managerId, setManagerId,
     companies, departments, positions, managersView,
-    // состояние
+
     error, setError, loading,
-    // submit
+    
     handleSubmit,
   };
 }
