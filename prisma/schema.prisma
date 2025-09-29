@@ -70,7 +70,7 @@ model User {
   /// Публичный E2E-ключ транспорта (для шифрования долей мне)
   e2ePublicKey            Json?
   e2ePublicKeyAlg         String   @default("ECIES-GOST-2012-256")
-  e2ePublicKeyFingerprint String   @unique
+  e2ePublicKeyFingerprint String?   @unique
   certifications         Certification[]          @relation("userCertificats")
   messages               ChatMessage[]            @relation("userMessage")
   dkgCommitments         DkgCommitment[]

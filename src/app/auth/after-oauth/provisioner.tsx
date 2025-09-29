@@ -7,9 +7,7 @@ import { useSession } from "next-auth/react";
 
 import { loadPrivateJwk, storePrivateJwk } from "@/lib/crypto/secure-storage";
 import { jwkFingerprint } from "@/lib/crypto/fingerprint";
-import { generateGostKeyPair } from "@/lib/crypto/generateGostKeyPair"; 
-// ⬆️ Файл, который я ранее предложил на базе ТВОЕГО crypto-кода (gost/ec.ts).
-// Если у тебя другое имя/путь — просто поправь импорт на твой генератор ГОСТ-пары.
+import { generateGostKeyPair } from "@/lib/crypto/generateGostKeyPair";
 
 export default function AfterOAuthProvisioner() {
   const { status, data: session } = useSession();
@@ -21,69 +19,81 @@ export default function AfterOAuthProvisioner() {
   useEffect(() => {
     (async () => {
       if (once.current) return;
+      // ждём валидную сессию и наличие user.id в ней
       if (status !== "authenticated" || !session?.user?.id) return;
       once.current = true;
 
-      const userId = session.user.id;
+      try {
+        const userId = session.user.id;
 
-      // 1) Проверка локального приватного
-      const localPriv = await loadPrivateJwk(userId);
+        // 1) Локальный приватный ключ
+        const localPriv = await loadPrivateJwk(userId);
 
-      // 2) Проверка публичного на сервере
-      // РЕКОМЕНДАЦИЯ: сделай так, чтобы /api/me/pubkey возвращал 200 если ключ есть, 404 если нет
-      const resp = await fetch("/api/me/pubkey", { method: "GET", cache: "no-store" });
-      const pubExists = resp.ok; // ok==true => ключ есть
-
-      if (pubExists) {
-        // Публичный есть. Если локального приватного нет — это новый браузер → восстановление.
-        if (!localPriv) {
-          // Не генерируем новый ключ, иначе потеряются зашифрованные ранее данные!
-          router.replace(`/keys/restore?next=${encodeURIComponent(next)}`);
+        // 2) Проверка публичного ключа на сервере
+        // Ожидаем: 200 — ключ ЕСТЬ; 404 — ключа НЕТ; 401 — нет доступа (сессия/куки)
+        const resp = await fetch("/api/me/pubkey", { method: "GET", cache: "no-store" });
+        if (resp.status === 401) {
+          // сессия умерла или куки не пришли — уводим на логин
+          router.replace(`/auth?next=${encodeURIComponent(next)}`);
           return;
         }
-        // Всё ок, идём дальше
+
+        const pubExists = resp.status === 200;
+
+        if (pubExists) {
+          // Публичный есть. Если приватного локально нет — это новый браузер → восстановление
+          if (!localPriv) {
+            router.replace(`/keys/restore?next=${encodeURIComponent(next)}`);
+            return;
+          }
+          // Всё ок — вперёд
+          router.replace(next);
+          return;
+        }
+
+        // 3) Публичного на сервере НЕТ → первый вход через OAuth без пары
+        const { publicJwk, privateJwk } = await generateGostKeyPair();
+
+        // Нормализация метаданных (на случай «немого» генератора)
+        (publicJwk  as any).alg     = (publicJwk  as any).alg ?? "ECIES-GOST-2012-256";
+        (privateJwk as any).alg     = (privateJwk as any).alg ?? "ECIES-GOST-2012-256";
+        (publicJwk  as any).key_ops = (publicJwk  as any).key_ops ?? ["encrypt","wrapKey"];
+        (privateJwk as any).key_ops = (privateJwk as any).key_ops ?? ["decrypt","unwrapKey"];
+
+        // 4) Отпечаток (клиентом — для UX), на сервере пересчитайте и проверьте
+        const fp = await jwkFingerprint(publicJwk);
+
+        // 5) Сохраняем публичный на сервере
+        const save = await fetch("/api/me/pubkey", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jwk: publicJwk,
+            fingerprint: fp,
+            alg: "ECIES-GOST-2012-256",
+          }),
+        });
+
+        // Если гонка вкладок/конфликт — не валимся, просто идём дальше
+        // 409/422/500 — трактуем как «не сохранили», но не блокируем UX
+        if (!save.ok && save.status !== 409) {
+          // опционально: показать тост/лог
+          // console.warn("Failed to save pubkey", save.status);
+        }
+
+        // 6) Сохраняем приватный JWK локально (шифрование в secure-storage — must)
+        await storePrivateJwk(userId, privateJwk);
+
+        // 7) Готово
         router.replace(next);
-        return;
-      }
-
-      // 3) Публичного на сервере НЕТ → это первый вход через Яндекс (создался User без ключа).
-      //    Генерим долговременную транспортную пару ГОСТ (ECIES-GOST-2012-256) на клиенте:
-      const { publicJwk, privateJwk } = await generateGostKeyPair();
-
-      // Нормализуем метаданные (если твой генератор их уже выставляет — не изменится)
-      (publicJwk  as any).alg     = (publicJwk  as any).alg ?? "ECIES-GOST-2012-256";
-      (privateJwk as any).alg     = (privateJwk as any).alg ?? "ECIES-GOST-2012-256";
-      (publicJwk  as any).key_ops = (publicJwk  as any).key_ops ?? ["encrypt","wrapKey"];
-      (privateJwk as any).key_ops = (privateJwk as any).key_ops ?? ["decrypt","unwrapKey"];
-
-      // 4) Считаем отпечаток публичного (Стрибог-256 по твоей функции)
-      const fp = await jwkFingerprint(publicJwk);
-
-      // 5) Отправляем публичный на сервер
-      const save = await fetch("/api/me/pubkey", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jwk: publicJwk,
-          fingerprint: fp,
-          alg: "ECIES-GOST-2012-256",
-        }),
-      });
-
-      if (!save.ok) {
-        // Если сервер отклонил (например, гонка вкладок) — просто уйдём дальше.
-        // Можно также показать тост/ошибку по желанию.
+      } catch (err) {
+        // Сеть/исключение — не зависаем в промежуточном состоянии
+        console.error("Provisioning failed:", err);
         router.replace(next);
-        return;
       }
-
-      // 6) Сохраняем приватный JWK ЛОКАЛЬНО (ВАЖНО: secure-storage должен шифровать at-rest)
-      await storePrivateJwk(userId, privateJwk);
-
-      // 7) Готово
-      router.replace(next);
     })();
-  }, [status, session, router, qs, next]);
+    // deps: next зависит от qs, session/status зависят от next-auth; once — ref
+  }, [status, session, router, next]);
 
   return null;
 }

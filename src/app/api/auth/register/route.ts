@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { Sex } from "@prisma/client";
+import { Sex, Prisma } from "@prisma/client";
 import { hash as bcryptHash } from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
 import { jwkFingerprint } from "@/lib/crypto/fingerprint";
 import { generateVerificationToken } from "@/lib/auth/tokens";
-import { sendVerificationEmail } from "@/lib/auth//email";
+import { sendVerificationEmail } from "@/lib/auth/email";
 
 // ▼ ДОБАВЬ:
 import { verifyHPT } from "@/lib/captcha/hpt";
@@ -13,7 +13,10 @@ import { extractIpUa } from "@/lib/auth/utils";
 
 export async function GET() {
   return NextResponse.json(
-    { message: "POST { email, password, publicKey, name?, surname?, patronymic?, age? (YYYY-MM-DD), sex? (MALE|FEMALE), image?, managerId?, companyId?, positionId?, departmentId?, publicKeyFingerprint? }" },
+    {
+      message:
+        "POST { email, password, publicKey, name?, surname?, patronymic?, age? (YYYY-MM-DD), sex? (MALE|FEMALE), image?, managerId?, companyId?, positionId?, departmentId?, publicKeyFingerprint? }",
+    },
     { status: 200 }
   );
 }
@@ -22,20 +25,40 @@ export async function POST(request: Request) {
   try {
     // ▼ НОВОЕ: проверяем HPT (auth:register)
     const { ip, ua } = extractIpUa(request);
+    // ОСТАВЛЕНО КАК ЕСТЬ (без пункта 2): парсим cookie вручную из заголовка
     const cookie = (request.headers as any)?.get?.("cookie") || "";
-    const hpt = cookie.split(/;\s*/).find((c: string) => c.startsWith("hpt="))?.split("=")[1] ?? "";
+    const hpt =
+      cookie
+        .split(/;\s*/)
+        .find((c: string) => c.startsWith("hpt="))
+        ?.split("=")[1] ?? "";
+
     if (!hpt || !verifyHPT(hpt, { ua, ip, requireScope: "auth:register" })) {
-      return NextResponse.json({ error: "captcha_required" }, { status: 401 });
+      return NextResponse.json({ error: "captcha_required" }, { status: 403 });
     }
 
     const body = await request.json();
     const {
-      email, password, name, surname, patronymic, age, sex, image,
-      managerId, companyId, positionId, departmentId, publicKey
-    } = body;
+      email,
+      password,
+      name,
+      surname,
+      patronymic,
+      age,
+      sex,
+      image,
+      managerId,
+      companyId,
+      positionId,
+      departmentId,
+      publicKey,
+    } = body ?? {};
+
+    // Нормализация email
+    const normEmail = String(email ?? "").trim().toLowerCase();
 
     // Базовая валидация
-    if (!email || !password) {
+    if (!normEmail || !password) {
       return NextResponse.json(
         { error: "Поля email и password обязательны" },
         { status: 400 }
@@ -49,7 +72,9 @@ export async function POST(request: Request) {
     }
 
     // Проверка, что пользователя ещё нет
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await prisma.user.findUnique({
+      where: { email: normEmail },
+    });
     if (existing) {
       return NextResponse.json(
         { error: "Пользователь с таким email уже существует" },
@@ -122,7 +147,7 @@ export async function POST(request: Request) {
     // Создаём пользователя (emailVerified оставляем null до подтверждения)
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normEmail,
         name: name ?? null,
         surname: surname ?? null,
         patronymic: patronymic ?? null,
@@ -135,39 +160,38 @@ export async function POST(request: Request) {
         departmentId: departmentId || null,
 
         // ГОСТ-транспортный публичный ключ
-        e2ePublicKey: publicKey, // Json (см. Prisma-модель)
+        e2ePublicKey: publicKey as Prisma.JsonObject, // Json
         e2ePublicKeyAlg: "ECIES-GOST-2012-256",
         e2ePublicKeyFingerprint: fingerprint, // String @unique
 
         // Пароль — через связанную сущность
         password: { create: { hash: passwordHash } },
 
-        // Важно: emailVerified должен быть null до подтверждения
-        // (Если в вашей Prisma-модели поле есть — можно явно указать:)
+        // Если в модели есть поле emailVerified — явно ставим null (не обязательно)
         // emailVerified: null,
       },
       select: { id: true, email: true },
     });
 
-    // === НОВОЕ: создаём verification token и отправляем письмо ===
+    // === Создаём verification token и отправляем письмо ===
     const { token, hashedToken, expires } = generateVerificationToken(24);
 
-    // Один активный токен на email: чистим старые и создаём новый
-    await prisma.verificationToken.deleteMany({
-      where: { identifier: user.email },
-    });
-
-    await prisma.verificationToken.create({
-      data: {
-        identifier: user.email,
-        token: hashedToken,
-        expires,
-      },
-    });
+    // Один активный токен на email: атомарно чистим и создаём новый
+    await prisma.$transaction([
+      prisma.verificationToken.deleteMany({
+        where: { identifier: user.email },
+      }),
+      prisma.verificationToken.create({
+        data: {
+          identifier: user.email,
+          token: hashedToken,
+          expires,
+        },
+      }),
+    ]);
 
     // Сборка абсолютной ссылки на verify-роут
-    const origin =
-      process.env.APP_BASE_URL || new URL(request.url).origin;
+    const origin = process.env.APP_BASE_URL || new URL(request.url).origin;
     const verifyUrl = new URL("/api/auth/verify", origin);
     verifyUrl.searchParams.set("token", token);
     verifyUrl.searchParams.set("email", user.email);
