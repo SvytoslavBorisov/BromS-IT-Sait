@@ -47,7 +47,7 @@ model User {
   age                    DateTime?                @default(now())
   sex                    Sex?                     @default(MALE)
   email                  String                   @unique
-  passwordHash           String
+  password               UserPassword?
   emailVerified          DateTime?
   publicKey              Json?
   image                  String?
@@ -101,6 +101,13 @@ model User {
   sessions               Session[]
 
   @@index([telegramUsername])
+}
+
+model UserPassword {
+  userId String @id
+  hash   String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserSettings {
@@ -492,57 +499,6 @@ model DkgRecoveryShare {
   @@index([recoveryId])
 }
 
-model players_fifa {
-  playerId       BigInt   @id @map("player_id")
-  age            Float?
-  date_of_birth  String?
-  first_name     String?
-
-  // внешний ключ может быть пустым, поэтому Int?
-  teamId         Int?     @map("team_id")
-  team           teams?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  shirt_number    BigInt?
-  position        String?
-  full_name       String?
-  last_name       String?
-  fifa_goals      BigInt?
-  fifa_physic     BigInt?
-  height          BigInt?
-  gk_skill        BigInt?
-  rb_skill        BigInt?
-  cb_skill        BigInt?
-  lb_skill        BigInt?
-  rwb_skill       BigInt?
-  dm_skill        BigInt?
-  lwb_skill       BigInt?
-  rm_skill        BigInt?
-  cm_skill        BigInt?
-  lm_skill        BigInt?
-  rw_skill        BigInt?
-  am_skill        BigInt?
-  lw_skill        BigInt?
-  st_skill        BigInt?
-  stamina         BigInt?
-  defending       BigInt?
-  shooting        BigInt?
-  pass            BigInt?
-  goalkeeper_save BigInt?
-
-  @@map("players_fifa")
-}
-
-model teams {
-  id    Int      @id @default(autoincrement())
-  title String?
-  liga  BigInt?
-
-  squad players_fifa[]
-
-  @@map("teams")
-}
-
-
 
 enum RecoveryStatus {
   PENDING
@@ -598,9 +554,4 @@ enum DkgRecoveryStatus {
   VERIFYING
   DONE
   FAILED
-}
-
-enum MatchStatus {
-  scheduled
-  finished
 }

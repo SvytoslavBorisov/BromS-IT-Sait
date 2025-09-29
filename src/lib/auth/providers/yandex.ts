@@ -6,6 +6,11 @@ export default function yandexProvider() {
     clientSecret: process.env.YANDEX_CLIENT_SECRET!,
     authorization: { params: { scope: "login:email login:info" } },
     profile(profile: any) {
+      const email =
+        (profile.default_email as string | undefined) ||
+        (Array.isArray(profile.emails) ? profile.emails[0] : undefined) ||
+        null;
+
       return {
         id: profile.id?.toString(),
         name:
@@ -13,10 +18,7 @@ export default function yandexProvider() {
           profile.real_name ||
           profile.login ||
           "Yandex User",
-        email:
-          (profile.default_email as string | undefined) ||
-          (Array.isArray(profile.emails) ? profile.emails[0] : undefined) ||
-          null,
+        email,
         image: profile.default_avatar_id
           ? `https://avatars.yandex.net/get-yapic/${profile.default_avatar_id}/islands-200`
           : null,

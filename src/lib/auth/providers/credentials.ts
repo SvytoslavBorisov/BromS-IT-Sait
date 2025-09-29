@@ -11,6 +11,7 @@ export default function credentialsProvider() {
       email: { label: "Email", type: "email" },
       password: { label: "Password", type: "password" },
     },
+
     async authorize(credentials, req) {
       const t0 = Date.now();
 
@@ -18,7 +19,6 @@ export default function credentialsProvider() {
         (req as any)?.headers?.get?.("x-request-id") ??
         (req as any)?.headers?.["x-request-id"]
       );
-
       const { ip, ua } = extractIpUa(req);
       const authLog = logger.child({ requestId, module: "auth/credentials" });
 
@@ -36,14 +36,21 @@ export default function credentialsProvider() {
       }
 
       const email = String(credentials.email).trim().toLowerCase();
-      const user = await prisma.user.findUnique({ where: { email } });
 
-      if (!user || !user.passwordHash) {
+      // Подгружаем связанную запись пароля
+      const user = await prisma.user.findUnique({
+        where: { email },
+        include: { password: true }, // <-- ВАЖНО: новая связь UserPassword
+      });
+
+      // Если пользователя нет или у него нет установленного пароля — запрещаем вход по паролю
+      const hash = user?.password?.hash ?? null;
+      if (!user || !hash) {
         authLog.warn({
           event: "auth.login",
           method: "password",
           outcome: "failure",
-          reason: "bad_credentials",
+          reason: user ? "no_password_set" : "bad_credentials",
           login: email,
           ip, ua,
           latencyMs: Date.now() - t0,
@@ -51,7 +58,7 @@ export default function credentialsProvider() {
         return null;
       }
 
-      const valid = await bcrypt.compare(credentials.password, user.passwordHash);
+      const valid = await bcrypt.compare(credentials.password, hash);
       if (!valid) {
         authLog.warn({
           event: "auth.login",
