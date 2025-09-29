@@ -14,14 +14,14 @@ export async function solvePow(params: {
   yieldEvery?: number;   // через сколько итераций делать yield (по умолчанию 8192)
   signal?: AbortSignal;  // отмена
 }): Promise<{ nonceHex: string; nonce: string; hashHex: string; difficulty: number }> {
-  const { stateB64, action, signal } = params;
+  const { stateB64, signal } = params;
   let required = Math.max(1, Math.min(255, params.difficulty | 0)); // 1..255
-  const timeoutMs = params.timeoutMs ?? 10000;                       // ↑ из 8000
-  const _y = Math.max(256, params.yieldEvery ?? 8192);               // ↑ из 4096
-  const yieldEvery = 1 << Math.floor(Math.log2(_y));
+  const timeoutMs = params.timeoutMs ?? 10000;
+  const _y = Math.max(256, params.yieldEvery ?? 8192);
+  const yieldEvery = 1 << Math.floor(Math.log2(_y)); // степень двойки
 
   if (!isSecureContext || typeof crypto === "undefined" || !crypto.subtle) {
-    // В проде это частая причина падений — сразу ясное сообщение
+    // На проде бывает из-за неправильной схемы (http). На localhost ок.
     throw new Error("WebCrypto not available: requires HTTPS secure context");
   }
 
@@ -54,7 +54,6 @@ export async function solvePow(params: {
       if (!adaptedDown && required > 12) {
         adaptedDown = true;
         required -= 1;
-        // продлим дедлайн пропорционально — ещё ~20% оставшегося изначального
         const extra = Math.max(1500, (timeoutMs * 0.2) | 0);
         (deadline as number) += extra;
         continue;
@@ -62,7 +61,7 @@ export async function solvePow(params: {
       throw new Error("pow_timeout");
     }
 
-    // настоящий yield (микро-пауза) — Promise.resolve() не всегда помогает
+    // периодический yield — разгружаем UI
     if ((iter++ & (yieldEvery - 1)) === 0) {
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, yieldedOnce ? 0 : 1));
@@ -87,8 +86,7 @@ export async function solvePow(params: {
     lo = (lo + 1) >>> 0;
     if (lo === 0) hi = (hi + 1) >>> 0;
 
-    // лёгкая «охрана» от слишком долгих единичных попыток без прогресса
-    // если уже прошло > 2/3 времени и мы выше 22 бит — аккуратно понизим на 1
+    // лёгкая адаптация: если прошло > 2/3 времени и мы > 22 бит — понизим на 1
     const elapsed = performance.now() - start;
     if (!adaptedDown && elapsed > timeoutMs * 0.67 && required > 22) {
       adaptedDown = true;
@@ -130,7 +128,10 @@ function leadingZeroBits(bytes: Uint8Array): number {
   let count = 0;
   for (let i = 0; i < bytes.length; i++) {
     const b = bytes[i];
-    if (b === 0) { count += 8; continue; }
+    if (b === 0) {
+      count += 8;
+      continue;
+    }
     for (let k = 7; k >= 0; k--) {
       if (((b >> k) & 1) === 0) count++;
       else return count;
