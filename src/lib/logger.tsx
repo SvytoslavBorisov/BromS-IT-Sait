@@ -35,6 +35,7 @@ const dayStamp = (d = new Date()) => d.toISOString().slice(0, 10);
 const SENSITIVE_KEYS = new Set([
   "password","pass","pwd","token","accessToken","refreshToken","secret","apiKey","authorization","cookie","set-cookie"
 ]);
+
 function maskSensitive(obj: any, depth = 0): any {
   if (obj == null || depth > 2) return obj;
   if (typeof obj === "string" || typeof obj === "number" || typeof obj === "boolean" || typeof obj === "bigint") return obj;
@@ -50,6 +51,7 @@ function maskSensitive(obj: any, depth = 0): any {
   }
   return obj;
 }
+
 function safeStringify(input: any): string {
   const seen = new WeakSet();
   return JSON.stringify(input, (key, value) => {
@@ -66,7 +68,7 @@ const isBuildPhase =
   process.env.NEXT_PHASE === "phase-production-build" ||
   !!(process as any).env?.__NEXT_PRIVATE_BUILD_WORKER; // внутренний флаг build-воркера
 
-// ── интерфейс логгера + noop для клиента/билда ────────────────────────────────
+// ── интерфейс логгера ─────────────────────────────────────────────────────────
 export interface Logger {
   write(level: LogLevel, msg: string, meta?: unknown): void;
   debug(msg: AnyRecord, meta?: unknown): void;
@@ -79,6 +81,7 @@ export interface Logger {
   child(ctx: Partial<Pick<BaseFields,"service"|"requestId"|"module">>): Logger;
 }
 
+// ── no-op реализация для клиента/билда ────────────────────────────────────────
 const noop = async () => {};
 const noopLogger: Logger = {
   write: () => {},
@@ -194,7 +197,6 @@ class ServerLogger implements Logger {
 }
 
 // ── ленивый синглтон ──────────────────────────────────────────────────────────
-// на клиенте/в build-phase возвращаем noop; на сервере — серверную реализацию
 let _loggerSingleton: Logger | null = null;
 export function getLogger(name = process.env.SERVICE_NAME): Logger {
   if (isClient || isBuildPhase) return noopLogger;
@@ -203,15 +205,22 @@ export function getLogger(name = process.env.SERVICE_NAME): Logger {
   return _loggerSingleton;
 }
 
-// Быстрые алиасы (без побочек при импорте)
-export const log = {
-  debug: (obj: AnyRecord) => getLogger().debug(obj),
-  info:  (obj: AnyRecord) => getLogger().info(obj),
-  warn:  (obj: AnyRecord) => getLogger().warn(obj),
-  error: (obj: AnyRecord) => getLogger().error(obj),
-  errorEx: (err: unknown, extra?: AnyRecord) => getLogger().logError(err, extra),
+// ── Публичный logger с поддержкой .child(...) ─────────────────────────────────
+// NB: это полноценный Logger, делегирующий к серверному синглтону.
+// На клиенте и в build-phase — no-op, так что импорт безопасен везде.
+export const logger: Logger = {
+  write: (level, msg, meta) => getLogger().write(level, msg, meta),
+  debug: (obj) => getLogger().debug(obj),
+  info:  (obj) => getLogger().info(obj),
+  warn:  (obj) => getLogger().warn(obj),
+  error: (obj) => getLogger().error(obj),
+  logError: (err, extra) => getLogger().logError(err, extra),
+  flushAndClose: () => getLogger().flushAndClose(),
+  setLevel: (lvl) => getLogger().setLevel(lvl),
+  child: (ctx) => getLogger().child(ctx),
 };
 
+// ── Утилиты ───────────────────────────────────────────────────────────────────
 export function ensureRequestId(existing?: string | null): string {
   if (existing && typeof existing === "string" && existing.length >= 8) return existing;
   return randomUUID();
@@ -221,4 +230,5 @@ export async function shutdownLogger() {
   await getLogger().flushAndClose();
 }
 
-export { log as logger };
+// (Для обратной совместимости можно оставить алиас, но лучше импортировать { logger }):
+// export const log = logger;
