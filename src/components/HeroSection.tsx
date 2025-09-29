@@ -209,10 +209,6 @@ export default function HeroSection() {
       className="relative isolate min-h-[100svh] w-full overflow-hidden bg-white"
       style={{ contain: "layout paint" }}
     >
-      {/* 1) Одинаковый wrapper для орбит всегда; монтируем содержимое только если heavyOK */}
-      <div className="pointer-events-none">
-        {heavyOK && <OrbitRingsMaybe />}
-      </div>
 
       {/* 2) Фон: на SSR/первом кадре ВСЕГДА StaticGridBg; после маунта переключаемся на Aurora при heavyOK */}
       {heavyOK ? (

@@ -6,3 +6,4 @@
   font-size: 2rem;
   color: #1e2a3a;
 }
+body { overflow-x: hidden; }

@@ -1,9 +1,15 @@
-// src/app/api/auth/register/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, Sex } from "@prisma/client";
-import { hash } from "bcryptjs";
+import { Sex } from "@prisma/client";
+import { hash as bcryptHash } from "bcryptjs";
 
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { jwkFingerprint } from "@/lib/crypto/fingerprint";
+import { generateVerificationToken } from "@/lib/auth/tokens";
+import { sendVerificationEmail } from "@/lib/auth//email";
+
+// ▼ ДОБАВЬ:
+import { verifyHPT } from "@/lib/captcha/hpt";
+import { extractIpUa } from "@/lib/auth/utils";
 
 export async function GET() {
   return NextResponse.json(
@@ -14,37 +20,35 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    // ▼ НОВОЕ: проверяем HPT (auth:register)
+    const { ip, ua } = extractIpUa(request);
+    const cookie = (request.headers as any)?.get?.("cookie") || "";
+    const hpt = cookie.split(/;\s*/).find((c: string) => c.startsWith("hpt="))?.split("=")[1] ?? "";
+    if (!hpt || !verifyHPT(hpt, { ua, ip, requireScope: "auth:register" })) {
+      return NextResponse.json({ error: "captcha_required" }, { status: 401 });
+    }
+
     const body = await request.json();
-
     const {
-      email,
-      password,
-      name,
-      surname,
-      patronymic,
-      age,                  // 'YYYY-MM-DD'
-      sex,
-      image,
-      managerId,
-      companyId,
-      positionId,
-      departmentId,
-      publicKey,            // ОТ КЛИЕНТА: публичный JWK (объект)
-    } = body ?? {};
+      email, password, name, surname, patronymic, age, sex, image,
+      managerId, companyId, positionId, departmentId, publicKey
+    } = body;
 
+    // Базовая валидация
     if (!email || !password) {
       return NextResponse.json(
         { error: "Поля email и password обязательны" },
         { status: 400 }
       );
     }
-    if (!publicKey) {
+    if (!publicKey || typeof publicKey !== "object") {
       return NextResponse.json(
-        { error: "Отсутствует publicKey. Ключевая пара должна генерироваться на клиенте" },
+        { error: "Отсутствует или некорректен publicKey (JWK)" },
         { status: 400 }
       );
     }
 
+    // Проверка, что пользователя ещё нет
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json(
@@ -53,24 +57,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Пароль -> hash
-    const passwordHash = await hash(password, 10);
-
-    // Приведение даты
-    let ageDate: Date | undefined = undefined;
+    // Приведение даты рождения
+    let ageDate: Date | null = null;
     if (age) {
       const d = new Date(age);
       if (isNaN(d.getTime())) {
         return NextResponse.json(
-          { error: "Поле age должно быть корректной датой (например, 1999-12-31)" },
+          {
+            error:
+              "Поле age должно быть корректной датой (например, 1999-12-31)",
+          },
           { status: 400 }
         );
       }
       ageDate = d;
     }
 
-    // Валидируем sex
-    let sexEnum: Sex | undefined = undefined;
+    // Валидация пола
+    let sexEnum: Sex | null = null;
     if (sex !== undefined && sex !== null) {
       const upper = String(sex).toUpperCase();
       if (upper !== "MALE" && upper !== "FEMALE") {
@@ -82,43 +86,102 @@ export async function POST(request: Request) {
       sexEnum = upper as Sex;
     }
 
-    // publicKey должен быть объектом
-    if (typeof publicKey !== "object") {
+    // Валидация JWK (публичный ключ ГОСТ-2012-256)
+    // Требуем EC-кривую ГОСТ-2012-256, координаты x/y и отсутствие d (приватника)
+    if (publicKey.kty !== "EC") {
       return NextResponse.json(
-        { error: "publicKey должен быть объектом JWK" },
+        { error: "JWK.kty должен быть 'EC'" },
+        { status: 400 }
+      );
+    }
+    if (publicKey.crv !== "GOST-2012-256") {
+      return NextResponse.json(
+        { error: "JWK.crv должен быть 'GOST-2012-256'" },
+        { status: 400 }
+      );
+    }
+    if (!publicKey.x || !publicKey.y) {
+      return NextResponse.json(
+        { error: "JWK должен содержать координаты x и y" },
+        { status: 400 }
+      );
+    }
+    if (publicKey.d) {
+      return NextResponse.json(
+        { error: "Публичный JWK не должен содержать поле d" },
         { status: 400 }
       );
     }
 
-    // (опционально) быстрая sanity‑проверка JWK
-    // например, требуем kty
-    if (!publicKey.kty) {
-      return NextResponse.json(
-        { error: "Некорректный JWK: отсутствует поле kty" },
-        { status: 400 }
-      );
-    }
+    // Хэш пароля (UserPassword)
+    const passwordHash = await bcryptHash(password, 10);
 
-    const data: any = {
-      email,
-      passwordHash,
-      publicKey,
-      ...(name ? { name } : {}),
-      ...(surname !== undefined ? { surname } : {}),
-      ...(patronymic !== undefined ? { patronymic } : {}),
-      ...(ageDate ? { age: ageDate } : {}),
-      ...(sexEnum ? { sex: sexEnum } : {}),
-      ...(image ? { image } : {}),
-      ...(managerId ? { managerId } : {}),
-      ...(companyId ? { companyId } : {}),
-      ...(positionId ? { positionId } : {}),
-      ...(departmentId ? { departmentId } : {}),
-    };
+    // Отпечаток ключа (считаем на сервере)
+    const fingerprint = await jwkFingerprint(publicKey);
 
-    const user = await prisma.user.create({ data });
+    // Создаём пользователя (emailVerified оставляем null до подтверждения)
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: name ?? null,
+        surname: surname ?? null,
+        patronymic: patronymic ?? null,
+        age: ageDate,
+        sex: sexEnum,
+        image: image ?? null,
+        managerId: managerId || null,
+        companyId: companyId || null,
+        positionId: positionId || null,
+        departmentId: departmentId || null,
 
+        // ГОСТ-транспортный публичный ключ
+        e2ePublicKey: publicKey, // Json (см. Prisma-модель)
+        e2ePublicKeyAlg: "ECIES-GOST-2012-256",
+        e2ePublicKeyFingerprint: fingerprint, // String @unique
+
+        // Пароль — через связанную сущность
+        password: { create: { hash: passwordHash } },
+
+        // Важно: emailVerified должен быть null до подтверждения
+        // (Если в вашей Prisma-модели поле есть — можно явно указать:)
+        // emailVerified: null,
+      },
+      select: { id: true, email: true },
+    });
+
+    // === НОВОЕ: создаём verification token и отправляем письмо ===
+    const { token, hashedToken, expires } = generateVerificationToken(24);
+
+    // Один активный токен на email: чистим старые и создаём новый
+    await prisma.verificationToken.deleteMany({
+      where: { identifier: user.email },
+    });
+
+    await prisma.verificationToken.create({
+      data: {
+        identifier: user.email,
+        token: hashedToken,
+        expires,
+      },
+    });
+
+    // Сборка абсолютной ссылки на verify-роут
+    const origin =
+      process.env.APP_BASE_URL || new URL(request.url).origin;
+    const verifyUrl = new URL("/api/auth/verify", origin);
+    verifyUrl.searchParams.set("token", token);
+    verifyUrl.searchParams.set("email", user.email);
+
+    // Отправляем письмо
+    await sendVerificationEmail(user.email, verifyUrl.toString());
+
+    // Возвращаем нейтральный ответ (не логиним до подтверждения)
     return NextResponse.json(
-      { id: user.id, email: user.email },
+      {
+        ok: true,
+        message:
+          "Регистрация принята. Проверьте e-mail и подтвердите адрес, чтобы войти.",
+      },
       { status: 201 }
     );
   } catch (error) {

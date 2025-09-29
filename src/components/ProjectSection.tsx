@@ -13,9 +13,6 @@ import CarouselClient from "@/app/CarouselClient";
 
 const EASE_IO = [0.4, 0.0, 0.2, 1] as const;
 
-// Орбиты грузим лениво (используем только НЕ на мобилке)
-const OrbitRings = dynamic(() => import("@/components/OrbitRings"), { ssr: false });
-
 /** ===================== ЛЁГКИЙ ФОН СЕКЦИИ (только для десктопа/планшета) ===================== **/
 function ProjectsBackground({
   x,
@@ -266,10 +263,6 @@ export default function ProjectsSection() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white to-transparent z-10" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent z-10" />
 
-      {/* Декор только не на мобиле */}
-      <div className="pointer-events-none">
-        <OrbitRings />
-      </div>
       <ProjectsBackground x={tiltX} y={tiltY} reduced={!!reduced} />
 
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 py-16 md:py-24">

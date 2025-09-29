@@ -68,8 +68,9 @@ model User {
   telegramLanguageCode   String?
   telegramLastAuthAt     DateTime?
   /// Публичный E2E-ключ транспорта (для шифрования долей мне)
-  e2ePublicKey           String?                  @unique
-  e2ePublicKeyAlg        String                   @default("ECIES-GOST-2012-256")
+  e2ePublicKey            Json?
+  e2ePublicKeyAlg         String   @default("ECIES-GOST-2012-256")
+  e2ePublicKeyFingerprint String   @unique
   certifications         Certification[]          @relation("userCertificats")
   messages               ChatMessage[]            @relation("userMessage")
   dkgCommitments         DkgCommitment[]
@@ -126,12 +127,21 @@ model UserSettings {
 }
 
 model VerificationToken {
-  identifier String
+  identifier String   // email
   token      String   @unique
   expires    DateTime
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+model PasswordResetToken {
+  identifier String   // email (нормализованный lower-case)
+  token      String   @unique  // храните ХЕШ токена, не raw
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("password_reset_tokens")
 }
 
 model ShamirSession {

@@ -1,10 +1,11 @@
+// components/auth/YandexButton.tsx
 "use client";
 import { signIn } from "next-auth/react";
 
 export function YandexTile() {
   return (
     <button
-      onClick={() => signIn("yandex", { callbackUrl: "/" })}
+      onClick={() => signIn("yandex", { callbackUrl: "/auth/after-oauth?next=/profile" })}
       className="group relative flex items-center justify-center h-12 rounded-2xl bg-red-600 text-white
                  ring-1 ring-black/10 hover:ring-black/20 transition overflow-hidden
                  hover:scale-[1.03] active:scale-[0.98] duration-200 ease-out"

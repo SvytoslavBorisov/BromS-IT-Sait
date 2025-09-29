@@ -12,14 +12,28 @@
 /* === Premium scrollbar: variables & base === */
 @layer base {
   :root{
-    --sb-size: 12px;                       /* толщина */
-    --sb-radius: 9999px;                   /* скругление */
-    --sb-track-1: rgba(0,0,0,.06);         /* трек (верх) */
-    --sb-track-2: rgba(0,0,0,.02);         /* трек (низ) */
-    --sb-thumb: rgba(17,17,17,.55);        /* бегунок */
-    --sb-thumb-hover: rgba(17,17,17,.75);
-    --sb-thumb-active: rgba(17,17,17,.95);
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    textarea:-webkit-autofill,
+    select:-webkit-autofill {
+      -webkit-text-fill-color: #111 !important;
+      caret-color: #111 !important;
+      -webkit-box-shadow: 0 0 0px 1000px #fff inset !important;
+              box-shadow: 0 0 0px 1000px #fff inset !important;
+      transition: background-color 99999s ease-out 0s !important; /* убирает мигание */
+      border: 1px solid #e5e7eb !important; /* нейтральная граница */
+      border-radius: 1rem; /* 16px, как у rounded-2xl */
+    }
+
+    /* На всякий — убираем системный синий outline у инпутов/кнопок */
+    input:focus,
+    textarea:focus,
+    select:focus,
+    button:focus {
+      outline: none !important;
   }
+}
 
   /* Firefox */
   *{

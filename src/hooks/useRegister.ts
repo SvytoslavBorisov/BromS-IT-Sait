@@ -1,29 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { storePrivateJwk } from "@/lib/crypto/secure-storage";
-import { jwkFingerprint } from "@/lib/crypto/fingerprint";
+import { ensureHuman } from "@/lib/captcha/ensureHuman";
+import { storePrivateJwk } from "@/lib/crypto/secure-storage"; // твой модуль
+import { jwkFingerprint } from "@/lib/crypto/fingerprint";     // твой модуль
+import { generateGostKeyPair } from "@/lib/crypto/generateGostKeyPair"; // новый файл сверху
 
 export type Sex = "MALE" | "FEMALE";
 
-export type Company   = { id: string; title: string };
-export type Department= { id: string; title: string; companyId: string };
-export type Position  = { id: string; title: string; companyId: string; rank: number };
-export type Manager   = { id: string; name: string | null; surname: string | null; patronymic: string | null; email: string; positionId: string | null; departmentId: string | null };
-
-async function generateKeyPair() {
-  const keyPair = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["sign", "verify"]
-  );
-  const publicJwk  = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
-  const privateJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
-  (publicJwk  as any).key_ops = ["verify"];
-  (privateJwk as any).key_ops = ["sign"];
-  return { publicJwk, privateJwk };
-}
+export type Company    = { id: string; title: string };
+export type Department = { id: string; title: string; companyId: string };
+export type Position   = { id: string; title: string; companyId: string; rank: number };
+export type Manager    = { id: string; name: string | null; surname: string | null; patronymic: string | null; email: string; positionId: string | null; departmentId: string | null };
 
 export function useRegister() {
   const router = useRouter();
@@ -50,24 +39,27 @@ export function useRegister() {
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/participants/options", { cache: "no-store" });
-        const data = await res.json();
-        if (res.ok) {
-          setCompanies(data.companies ?? []);
-          setDepartments(data.departments ?? []);
-          setPositions(data.positions ?? []);
-          setManagers([]);
-        } else setError(data.error || "Ошибка загрузки справочников");
-      } catch {
-        setError("Сетевая ошибка при загрузке справочников");
-      }
-    })();
-  }, []);
+  // Первичная загрузка справочников
+  // useEffect(() => {
+  //   (async () => {
+  //     try {
+  //       const res = await fetch("/api/participants/options", { cache: "no-store" });
+  //       const data = await res.json();
+  //       if (res.ok) {
+  //         setCompanies(data.companies ?? []);
+  //         setDepartments(data.departments ?? []);
+  //         setPositions(data.positions ?? []);
+  //         setManagers([]);
+  //       } else setError(data.error || "Ошибка загрузки справочников");
+  //     } catch {
+  //       setError("Сетевая ошибка при загрузке справочников");
+  //     }
+  //   })();
+  // }, []);
 
+  // Каскад по компании
   useEffect(() => {
     if (!companyId) {
       setDepartments([]); setPositions([]); setManagers([]);
@@ -92,6 +84,7 @@ export function useRegister() {
     })();
   }, [companyId]);
 
+  // Дозагрузка менеджеров при смене отдела
   useEffect(() => {
     if (!companyId) return;
     (async () => {
@@ -118,13 +111,32 @@ export function useRegister() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
     setError(null);
     setLoading(true);
+
     try {
-      const { publicJwk, privateJwk } = await generateKeyPair();
+      // 1) Генерация ДОЛГОВРЕМЕННОЙ транспортной пары ГОСТ (ECIES-GOST-2012-256) на клиенте
+      let { publicJwk, privateJwk } = await generateGostKeyPair();
+
+      // Нормализация (если генератор уже всё выставляет — это не изменит значения)
+      (publicJwk  as any).alg     = (publicJwk  as any).alg ?? "ECIES-GOST-2012-256";
+      (privateJwk as any).alg     = (privateJwk as any).alg ?? "ECIES-GOST-2012-256";
+      (publicJwk  as any).key_ops = (publicJwk  as any).key_ops ?? ["encrypt","wrapKey"];
+      (privateJwk as any).key_ops = (privateJwk as any).key_ops ?? ["decrypt","unwrapKey"];
+
+      // 2) Сохранить приватный JWK локально (твой secure-storage; проверь, что он шифрует at-rest)
+      // Пока адресуем по email; после первого логина лучше мигрировать хранение под стабильный userId
       await storePrivateJwk(email, privateJwk);
+
+      // 3) Отпечаток публичного ключа (твой fingerprint.tsx)
       const pubFp = await jwkFingerprint(publicJwk);
 
+      await ensureHuman("register");
+
+      // 4) Регистрация на сервере
       const body = {
         name: name || undefined,
         surname: surname || undefined,
@@ -132,14 +144,17 @@ export function useRegister() {
         age: age || undefined,
         sex: sex || undefined,
         email,
-        password,
+        password, // сервер создаст UserPassword при наличии
         image: image || undefined,
         companyId: companyId || undefined,
         departmentId: departmentId || undefined,
         positionId: positionId || undefined,
         managerId: managerId || undefined,
+
+        // Транспортный ГОСТ-ключ
         publicKey: publicJwk,
         publicKeyFingerprint: pubFp,
+        e2ePublicKeyAlg: "ECIES-GOST-2012-256",
       };
 
       const res = await fetch("/api/auth/register", {
@@ -148,8 +163,9 @@ export function useRegister() {
         body: JSON.stringify(body),
       });
 
-      if (res.ok) router.push("/auth/login");
-      else {
+      if (res.ok) {
+        router.push("/auth/login");
+      } else {
         const data = await res.json().catch(() => ({}));
         setError(data.error || "Не удалось зарегистрироваться");
       }
@@ -158,6 +174,7 @@ export function useRegister() {
       setError("Ошибка при генерации ключа или сети. Попробуйте ещё раз");
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -170,7 +187,6 @@ export function useRegister() {
     companies, departments, positions, managersView,
 
     error, setError, loading,
-    
     handleSubmit,
   };
 }

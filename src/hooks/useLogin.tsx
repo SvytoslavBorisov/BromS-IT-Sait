@@ -1,8 +1,10 @@
+// src/hooks/useLogin.ts
 "use client";
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { ensureHuman } from "@/lib/captcha/ensureHuman";
 
 export function useLogin() {
   const [email, setEmail]       = useState("");
@@ -14,24 +16,33 @@ export function useLogin() {
 
   const toggleShowPass = () => setShowPass(v => !v);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
+  const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
     setError(null);
     setLoading(true);
-
     try {
+      // 1) ОБЯЗАТЕЛЬНО: сперва получить HPT (установит HttpOnly cookie)
+      await ensureHuman("login");
+
+      // 2) Диагностика: убедимся, что сервер действительно видит HPT
+      const probe = await fetch("/api/captcha/hpt", { cache: "no-store" })
+        .then(r => r.json()).catch(() => ({}));
+
+      // 3) Логин. На всякий случай — прокинем HPT в тело (фолбэк для дев-режима)
       const res = await signIn("credentials", {
-        redirect: false,
         email,
         password,
-        callbackUrl: "/profile",
+        redirect: false,
+        ...(probe?.ok && probe?.hpt ? { hpt: probe.hpt } : {}),
       });
 
-      if (!res?.error) router.push(res?.url ?? "/profile");
-      else setError("Неверный email или пароль.");
+      if (res?.ok) {
+        router.replace("/profile");
+      } else {
+        setError("Неверный логин или пароль.");
+      }
     } catch {
-      setError("Что‑то пошло не так. Попробуйте ещё раз.");
+      setError("Подтвердите, что вы не бот и попробуйте снова.");
     } finally {
       setLoading(false);
     }

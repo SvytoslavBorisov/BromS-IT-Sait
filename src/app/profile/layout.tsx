@@ -10,7 +10,7 @@ export default async function ProfileLayout({ children }: { children: React.Reac
   return (
     <>
       {/* Компонент на клиенте, который позаботится о генерации/загрузке ключей */}
-      <KeyInitializer />
+      {/* <KeyInitializer /> */}
 
       {/* Ваши защищённые страницы */}
       {children}
