@@ -1,18 +1,23 @@
 // src/lib/auth/index.ts
 import { getServerSession, type NextAuthOptions } from "next-auth";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
+// ЗАМЕНА: используем кастомный адаптер, который проставляет e2ePublicKeyFingerprint ДО INSERT
+import { StrictPrismaAdapter } from "@/lib/auth/StrictPrismaAdapter";
 import { prisma } from "@/lib/prisma";
 
 import credentialsProvider from "./providers/credentials";
 import yandexProvider from "./providers/yandex";
 import callbacksFromFile from "./callbacks";
 
+// контекст OAuth, чтобы передать provider/provAccId адаптеру
+import { setOAuthCtxProvider } from "@/lib/auth/oauthCtx";
+
 function normEmail(e?: string | null) {
   return (e ?? "").trim().toLowerCase() || null;
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  // БЫЛО: adapter: PrismaAdapter(prisma),
+  adapter: StrictPrismaAdapter(), // ← этот адаптер гарантированно кладёт e2ePublicKeyFingerprint
 
   providers: [credentialsProvider(), yandexProvider()],
 
@@ -26,6 +31,21 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET!, // не оставляй пустым
 
   callbacks: {
+    // если в callbacksFromFile есть свои коллбэки — они подтянутся через spread ниже
+    // ВАЖНО: linkAccount должен сработать до createUser — сохраняем provider/id в "карман"
+    async linkAccount({ account }) {
+      if (account?.provider && account?.providerAccountId) {
+        setOAuthCtxProvider(account.provider, account.providerAccountId);
+      }
+      // если у тебя в callbacksFromFile тоже есть linkAccount — вызовём его
+      const maybe = (callbacksFromFile as any)?.linkAccount;
+      if (typeof maybe === "function") {
+        const r = await maybe({ account } as any);
+        if (typeof r === "boolean") return r;
+      }
+      return true;
+    },
+
     async jwt({ token, user }) {
       if (user?.id) (token as any).uid = user.id;
       if (user?.email || token.email) {
@@ -41,18 +61,18 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = (token as any).uid ?? undefined;
 
         const em = normEmail(session.user.email ?? (token.email as string | undefined));
-        // чтобы не ловить "string | undefined -> string", присваиваем только если строка
         if (typeof em === "string") {
           session.user.email = em;
-        } else {
-          // оставим как есть (обычно NextAuth допускает undefined|null)
-          // session.user.email = undefined as any; // не обязательно
         }
       }
       return session;
     },
 
-    ...callbacksFromFile,
+    // Подмешиваем остальные коллбэки (если есть), НО наш linkAccount уже определён выше
+    ...(() => {
+      const { linkAccount, ...rest } = (callbacksFromFile as any) ?? {};
+      return rest;
+    })(),
   },
 };
 

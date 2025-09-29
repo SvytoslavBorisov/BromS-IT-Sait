@@ -1,4 +1,5 @@
 import YandexProvider from "next-auth/providers/yandex";
+import { setOAuthCtxEmail } from "@/lib/auth/oauthCtx"; // ← ДОБАВЬ
 
 export default function yandexProvider() {
   return YandexProvider({
@@ -10,6 +11,9 @@ export default function yandexProvider() {
         (profile.default_email as string | undefined) ||
         (Array.isArray(profile.emails) ? profile.emails[0] : undefined) ||
         null;
+
+      // ← ДОБАВЬ: сохраним email в модульном контексте, чтобы адаптер мог использовать до INSERT
+      if (email) setOAuthCtxEmail(email);
 
       return {
         id: profile.id?.toString(),

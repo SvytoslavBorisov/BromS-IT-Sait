@@ -167,8 +167,7 @@ export async function POST(request: Request) {
         // Пароль — через связанную сущность
         password: { create: { hash: passwordHash } },
 
-        // Если в модели есть поле emailVerified — явно ставим null (не обязательно)
-        // emailVerified: null,
+        emailVerified: null,
       },
       select: { id: true, email: true },
     });
