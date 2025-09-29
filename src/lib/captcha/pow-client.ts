@@ -2,56 +2,71 @@
 // Клиентский PoW под серверную формулу:
 // digest = SHA-256( state_bytes || nonce_bytes )
 // state — base64url (без padding), nonce — 8 байт (u64, BE).
-// Возвращаем nonceHex и hashHex + актуальную difficulty.
+// Возвращаем nonceHex и hashHex + актуальную difficulty (с учётом адаптации).
 
 type Action = "login" | "register" | "resend" | "forgot" | "reset";
 
 export async function solvePow(params: {
   stateB64: string;
-  action: Action;        // для логов/телеметрии (не влияет на хеш)
-  difficulty: number;    // требуемые ведущие нулевые биты (индикативно)
-  timeoutMs?: number;    // по умолчанию 8000
-  yieldEvery?: number;   // по умолчанию 4096
-  signal?: AbortSignal;  // опциональная отмена
+  action: Action;        // только для телеметрии/логов
+  difficulty: number;    // целевые ведущие нули
+  timeoutMs?: number;    // общий дедлайн (по умолчанию 10000)
+  yieldEvery?: number;   // через сколько итераций делать yield (по умолчанию 8192)
+  signal?: AbortSignal;  // отмена
 }): Promise<{ nonceHex: string; nonce: string; hashHex: string; difficulty: number }> {
-  const { stateB64, difficulty, signal } = params;
-  const timeoutMs = params.timeoutMs ?? 8000;
-
-  // нормализуем yieldEvery в степень двойки (>= 256)
-  const _y = Math.max(256, params.yieldEvery ?? 4096);
+  const { stateB64, action, signal } = params;
+  let required = Math.max(1, Math.min(255, params.difficulty | 0)); // 1..255
+  const timeoutMs = params.timeoutMs ?? 10000;                       // ↑ из 8000
+  const _y = Math.max(256, params.yieldEvery ?? 8192);               // ↑ из 4096
   const yieldEvery = 1 << Math.floor(Math.log2(_y));
 
-  if (typeof crypto === "undefined" || !crypto.subtle) {
-    throw new Error("WebCrypto not available");
+  if (!isSecureContext || typeof crypto === "undefined" || !crypto.subtle) {
+    // В проде это частая причина падений — сразу ясное сообщение
+    throw new Error("WebCrypto not available: requires HTTPS secure context");
   }
 
   const stateBytes = b64urlToBytes(stateB64);
-  const deadline = Date.now() + timeoutMs;
+  const concat = new Uint8Array(stateBytes.length + 8);
+  concat.set(stateBytes, 0);
+
+  const deadline = performance.now() + timeoutMs;
+  const start = performance.now();
 
   // Случайный старт nonce (u64)
   const seed = new Uint32Array(2);
-  (crypto as Crypto).getRandomValues(seed);
+  crypto.getRandomValues(seed);
   let hi = seed[0] >>> 0;
   let lo = seed[1] >>> 0;
 
   const nonceBytes = new Uint8Array(8);
 
-  // Буфер: state || nonce(8)
-  const concat = new Uint8Array(stateBytes.length + 8);
-  concat.set(stateBytes, 0);
-
   let iter = 0;
+  let yieldedOnce = false;
+  let adaptedDown = false; // позволим один дауншифт сложности при дедлайне
+
   // eslint-disable-next-line no-constant-condition
   while (true) {
     if (signal?.aborted) throw new Error("pow_aborted");
-    if (Date.now() > deadline) {
+
+    // реальный дедлайн
+    if (performance.now() > deadline) {
+      // Однократная адаптация: понизим сложность на 1 бит и дадим ещё немного времени
+      if (!adaptedDown && required > 12) {
+        adaptedDown = true;
+        required -= 1;
+        // продлим дедлайн пропорционально — ещё ~20% оставшегося изначального
+        const extra = Math.max(1500, (timeoutMs * 0.2) | 0);
+        (deadline as number) += extra;
+        continue;
+      }
       throw new Error("pow_timeout");
     }
 
+    // настоящий yield (микро-пауза) — Promise.resolve() не всегда помогает
     if ((iter++ & (yieldEvery - 1)) === 0) {
-      // даём шанc UI/рендеру
       // eslint-disable-next-line no-await-in-loop
-      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, yieldedOnce ? 0 : 1));
+      yieldedOnce = true;
     }
 
     writeU64BE(nonceBytes, hi, lo);
@@ -62,16 +77,23 @@ export async function solvePow(params: {
     const digest = new Uint8Array(digestBuf);
 
     const lz = leadingZeroBits(digest);
-    if (lz >= difficulty) {
+    if (lz >= required) {
       const hashHex = toHex(digest);
       const nonceHex = toHex(nonceBytes);
-      // Возвращаем однозначный формат + legacy-ключ "nonce" для совместимости
-      return { nonceHex, nonce: nonceHex, hashHex, difficulty };
+      return { nonceHex, nonce: nonceHex, hashHex, difficulty: required };
     }
 
     // ++nonce (u64)
     lo = (lo + 1) >>> 0;
     if (lo === 0) hi = (hi + 1) >>> 0;
+
+    // лёгкая «охрана» от слишком долгих единичных попыток без прогресса
+    // если уже прошло > 2/3 времени и мы выше 22 бит — аккуратно понизим на 1
+    const elapsed = performance.now() - start;
+    if (!adaptedDown && elapsed > timeoutMs * 0.67 && required > 22) {
+      adaptedDown = true;
+      required -= 1;
+    }
   }
 }
 
@@ -79,8 +101,7 @@ export async function solvePow(params: {
 
 function b64urlToBytes(s: string): Uint8Array {
   const padLen = (4 - (s.length % 4)) % 4;
-  const pad = padLen ? "=".repeat(padLen) : "";
-  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + (padLen ? "=".repeat(padLen) : "");
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i) & 0xff;
@@ -100,9 +121,7 @@ function writeU64BE(out: Uint8Array, hi: number, lo: number) {
 
 function toHex(bytes: Uint8Array): string {
   let s = "";
-  for (let i = 0; i < bytes.length; i++) {
-    s += (bytes[i] & 0xff).toString(16).padStart(2, "0");
-  }
+  for (let i = 0; i < bytes.length; i++) s += (bytes[i] & 0xff).toString(16).padStart(2, "0");
   return s;
 }
 
@@ -111,11 +130,7 @@ function leadingZeroBits(bytes: Uint8Array): number {
   let count = 0;
   for (let i = 0; i < bytes.length; i++) {
     const b = bytes[i];
-    if (b === 0) {
-      count += 8;
-      continue;
-    }
-    // первый ненулевой байт: считаем нули с MSB
+    if (b === 0) { count += 8; continue; }
     for (let k = 7; k >= 0; k--) {
       if (((b >> k) & 1) === 0) count++;
       else return count;

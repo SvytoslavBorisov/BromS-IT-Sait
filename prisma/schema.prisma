@@ -40,66 +40,66 @@ model Session {
 }
 
 model User {
-  id                     String                   @id @default(cuid())
-  name                   String?
-  surname                String?                  @default("")
-  patronymic             String?                  @default("")
-  age                    DateTime?                @default(now())
-  sex                    Sex?                     @default(MALE)
-  email                  String                   @unique
-  password               UserPassword?
-  emailVerified          DateTime?
-  publicKey              Json?
-  image                  String?
-  phone                  String?
-  location               String?
-  createdAt              DateTime                 @default(now())
-  updatedAt              DateTime?                @updatedAt
-  companyId              String?
-  positionId             String?
-  departmentId           String?
-  managerId              String?
+  id                      String                   @id @default(cuid())
+  name                    String?
+  surname                 String?                  @default("")
+  patronymic              String?                  @default("")
+  age                     DateTime?                @default(now())
+  sex                     Sex?                     @default(MALE)
+  email                   String                   @unique
+  emailVerified           DateTime?
+  publicKey               Json?
+  image                   String?
+  phone                   String?
+  location                String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime?                @updatedAt
+  companyId               String?
+  positionId              String?
+  departmentId            String?
+  managerId               String?
   /// --- Telegram link ---
-  telegramId             String?                  @unique
-  telegramUsername       String?
-  telegramLinkedAt       DateTime?
-  telegramAllowsWrite    Boolean                  @default(false)
-  telegramPhotoUrl       String?
-  telegramLanguageCode   String?
-  telegramLastAuthAt     DateTime?
+  telegramId              String?                  @unique
+  telegramUsername        String?
+  telegramLinkedAt        DateTime?
+  telegramAllowsWrite     Boolean                  @default(false)
+  telegramPhotoUrl        String?
+  telegramLanguageCode    String?
+  telegramLastAuthAt      DateTime?
+  e2ePublicKeyAlg         String                   @default("ECIES-GOST-2012-256")
+  e2ePublicKeyFingerprint String                   @unique
   /// Публичный E2E-ключ транспорта (для шифрования долей мне)
   e2ePublicKey            Json?
-  e2ePublicKeyAlg         String   @default("ECIES-GOST-2012-256")
-  e2ePublicKeyFingerprint String?   @unique
-  certifications         Certification[]          @relation("userCertificats")
-  messages               ChatMessage[]            @relation("userMessage")
-  dkgCommitments         DkgCommitment[]
-  dkgComplaintsAsAccused DkgComplaint[]           @relation("complaintsAccused")
-  dkgComplaintsAsAccuser DkgComplaint[]           @relation("complaintsAccuser")
-  dkgParticipants        DkgParticipant[]
-  dkgReadiness           DkgReady[]
-  DkgRecoveryParticipant DkgRecoveryParticipant[] @relation("DkgRecoveryParticipantUser")
-  DkgRecoverySession     DkgRecoverySession[]     @relation("DkgRecoverySessionUser")
-  DkgRecoveryShare       DkgRecoveryShare[]       @relation("DkgRecoveryShareUser")
-  dkgSessionsCreated     DkgSession[]             @relation("DkgSessionCreatedBy")
-  dkgSharesFrom          DkgShareOutbox[]         @relation("dkgSharesFrom")
-  dkgSharesTo            DkgShareOutbox[]         @relation("dkgSharesTo")
-  notification           Notification[]           @relation("userNotification")
-  recoverySessions       RecoverySession[]        @relation("RecoveryDealer")
-  shares                 Share[]                  @relation("UserShares")
-  sendReceipts           ShareReceipt[]           @relation("sendReceipts")
-  shareReceipts          ShareReceipt[]           @relation("ReceiptShareholder")
-  signatures             Signatures[]             @relation("usersSignatures")
-  company                Company?                 @relation("userCompany", fields: [companyId], references: [id])
-  department             Department?              @relation("userDepartment", fields: [departmentId], references: [id])
-  manager                User?                    @relation("UserHierarchy", fields: [managerId], references: [id])
-  reports                User[]                   @relation("UserHierarchy")
-  position               Position?                @relation("userPosition", fields: [positionId], references: [id])
-  settings               UserSettings?
-  accounts               Account[]
-  documentSignSession    documentSignSession[]    @relation("documentSignSessionDealer")
-  documents              Document[]               @relation("usersDocuments")
-  sessions               Session[]
+  certifications          Certification[]          @relation("userCertificats")
+  messages                ChatMessage[]            @relation("userMessage")
+  dkgCommitments          DkgCommitment[]
+  dkgComplaintsAsAccused  DkgComplaint[]           @relation("complaintsAccused")
+  dkgComplaintsAsAccuser  DkgComplaint[]           @relation("complaintsAccuser")
+  dkgParticipants         DkgParticipant[]
+  dkgReadiness            DkgReady[]
+  DkgRecoveryParticipant  DkgRecoveryParticipant[] @relation("DkgRecoveryParticipantUser")
+  DkgRecoverySession      DkgRecoverySession[]     @relation("DkgRecoverySessionUser")
+  DkgRecoveryShare        DkgRecoveryShare[]       @relation("DkgRecoveryShareUser")
+  dkgSessionsCreated      DkgSession[]             @relation("DkgSessionCreatedBy")
+  dkgSharesFrom           DkgShareOutbox[]         @relation("dkgSharesFrom")
+  dkgSharesTo             DkgShareOutbox[]         @relation("dkgSharesTo")
+  notification            Notification[]           @relation("userNotification")
+  recoverySessions        RecoverySession[]        @relation("RecoveryDealer")
+  shares                  Share[]                  @relation("UserShares")
+  sendReceipts            ShareReceipt[]           @relation("sendReceipts")
+  shareReceipts           ShareReceipt[]           @relation("ReceiptShareholder")
+  signatures              Signatures[]             @relation("usersSignatures")
+  company                 Company?                 @relation("userCompany", fields: [companyId], references: [id])
+  department              Department?              @relation("userDepartment", fields: [departmentId], references: [id])
+  manager                 User?                    @relation("UserHierarchy", fields: [managerId], references: [id])
+  reports                 User[]                   @relation("UserHierarchy")
+  position                Position?                @relation("userPosition", fields: [positionId], references: [id])
+  password                UserPassword?
+  settings                UserSettings?
+  accounts                Account[]
+  documentSignSession     documentSignSession[]    @relation("documentSignSessionDealer")
+  documents               Document[]               @relation("usersDocuments")
+  sessions                Session[]
 
   @@index([telegramUsername])
 }
@@ -107,8 +107,7 @@ model User {
 model UserPassword {
   userId String @id
   hash   String
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserSettings {
@@ -127,7 +126,7 @@ model UserSettings {
 }
 
 model VerificationToken {
-  identifier String   // email
+  identifier String
   token      String   @unique
   expires    DateTime
 
@@ -136,8 +135,8 @@ model VerificationToken {
 }
 
 model PasswordResetToken {
-  identifier String   // email (нормализованный lower-case)
-  token      String   @unique  // храните ХЕШ токена, не raw
+  identifier String
+  token      String   @unique
   expires    DateTime
 
   @@unique([identifier, token])
@@ -508,7 +507,6 @@ model DkgRecoveryShare {
   @@unique([recoveryId, fromUserId])
   @@index([recoveryId])
 }
-
 
 enum RecoveryStatus {
   PENDING
