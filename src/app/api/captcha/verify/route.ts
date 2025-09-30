@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     const hpt = issueHPT({ scope, ua, ip, ttlSec: 20 * 60 });
 
     const isProd = process.env.NODE_ENV === "production";
-    // ВАЖНО: укажи реальный домен без схемы/порта, например ".bromsit.ru" или ".dmsprint.ru"
+
     const domain = process.env.APP_COOKIE_DOMAIN || undefined;
 
     const res = NextResponse.json({ ok:true }, { status:200 });
