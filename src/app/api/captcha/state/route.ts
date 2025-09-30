@@ -1,4 +1,8 @@
 // src/app/api/captcha/state/route.ts
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
 import { extractIpUa } from "@/lib/auth/utils";
 import {
@@ -15,55 +19,29 @@ export async function GET(request: Request) {
   const action = url.searchParams.get("act") as CaptchaAction | null;
 
   if (!action || !isAllowedAction(action)) {
-    const res = NextResponse.json(
-      { message: "bad_request", reason: "bad_action" },
-      { status: 400 }
-    );
-    res.headers.set("Cache-Control", "no-store");
+    const res = NextResponse.json({ ok:false, message:"bad_action" }, { status:400 });
+    res.headers.set("Cache-Control","no-store");
     return res;
   }
 
-  // FAST-PATH: уже есть валидный HPT? — PoW не нужен
-  const cookieHeader = (request.headers as any)?.get?.("cookie") || "";
-  const hpt =
-    cookieHeader.split(/;\s*/).find((c: string) => c.startsWith("hpt="))?.split("=")[1] ||
-    "";
+  // если уже есть валидный hpt — можно скипнуть PoW
+  const rawCookie = (request.headers as any).get?.("cookie") || "";
+  const hpt = rawCookie.split(/;\s*/).find((c:string)=>c.startsWith("hpt="))?.split("=")[1] || "";
+  const skip = !!(hpt && verifyHPT(hpt, { ua, ip, requireScope: `auth:${action}` }));
 
-  if (hpt) {
-    try {
-      const ok = verifyHPT(hpt, { ua, ip, requireScope: "auth:*" });
-      if (ok) {
-        const res = NextResponse.json({ ok: true, skip: true }, { status: 200 });
-        res.headers.set("Cache-Control", "no-store");
-        return res;
-      }
-    } catch {
-      // игнорируем и выдаём новый state
-    }
-  }
-
-  // Единая сложность
   const requiredDifficulty = getDifficultyFor(action, { ua, ip, env: process.env.NODE_ENV });
+  const ttlSec = 120;
 
-  // Подписываем state c привязкой к UA/IP и TTL
-  const { state, stateBody, ttlSec } = signState({
+  // подписанный state = "<body>.<sig>", где body — чистый base64url без padding.
+  const { state, stateBody } = signState({
     action,
     ua,
     ip,
     need: requiredDifficulty,
-    ttlSec: 120,
+    ttlSec,
   });
 
-  const res = NextResponse.json(
-    {
-      ok: true,
-      state,      // подписанное "body.sig" (для verify)
-      stateBody,  // ЧИСТЫЙ base64url без padding (для PoW)
-      requiredDifficulty,
-      ttlSec,
-    },
-    { status: 200 }
-  );
-  res.headers.set("Cache-Control", "no-store");
+  const res = NextResponse.json({ ok:true, skip, state, stateBody, requiredDifficulty, ttlSec }, { status:200 });
+  res.headers.set("Cache-Control","no-store");
   return res;
 }

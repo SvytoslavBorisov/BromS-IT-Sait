@@ -25,30 +25,27 @@ type Ctx = { ua?: string; ip?: string | null; env?: string | undefined };
  * - Dev: не выше 18–19
  */
 export function getDifficultyFor(action: CaptchaAction, ctx: Ctx): number {
-  const ua = ctx.ua || "";
-  const env = (ctx.env || process.env.NODE_ENV || "production").toLowerCase();
+    const ua = ctx.ua || "";
+    const env = (ctx.env || process.env.NODE_ENV || "production").toLowerCase();
 
-  const isMobile = /Android|iPhone|Mobile/i.test(ua);
-  const isDesktop = /Windows NT|Mac OS X|X11|Linux x86_64/i.test(ua);
+    const isMobile = /Android|iPhone|Mobile/i.test(ua);
+    const isDesktop = /Windows NT|Mac OS X|X11|Linux x86_64/i.test(ua);
 
   // базовые значения
-  let need =
-    action === "login"   ? 19 :
-    action === "register"? 18 :
-    action === "resend"  ? 17 :
-    action === "forgot"  ? 17 :
-    action === "reset"   ? 18 : 18;
+    let need =
+        action === "login"    ? 18 :
+        action === "register" ? 17 :
+        action === "resend"   ? 16 :
+        action === "forgot"   ? 16 :
+        action === "reset"    ? 17 : 17;
 
-  if (isMobile) need -= 2;
-  else if (!isDesktop) need -= 1;
+    if (isMobile) need -= 2;
+    else if (!isDesktop) need -= 1;
 
-  // минимальные/максимальные рамки
-  need = Math.max(14, Math.min(22, need));
+    need = Math.max(14, Math.min(22, need));
+    if (env !== "production") need = Math.min(need, 17); // dev ещё полегче
 
-  // на dev не задираем слишком высоко
-  if (env !== "production") need = Math.min(need, 18);
-
-  return need;
+    return need;
 }
 
 /* --------------------- Подписанный state --------------------- */
