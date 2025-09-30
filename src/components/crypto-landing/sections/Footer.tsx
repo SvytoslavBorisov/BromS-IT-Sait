@@ -41,7 +41,7 @@ export default function Footer() {
               className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/5 hover:bg-white/10 transition">
               <Linkedin className="h-4 w-4 text-white" />
             </Link>
-            <Link href="mailto:info@bromsit.ru" aria-label="Email"
+            <Link href="mailto:bromsit@mail.ru" aria-label="Email"
               className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/5 hover:bg-white/10 transition">
               <Mail className="h-4 w-4 text-white" />
             </Link>

@@ -15,15 +15,18 @@ import {
 import { issueHPT } from "@/lib/captcha/hpt";
 import crypto from "crypto";
 
+
 function b64urlToBuf(s: string): Buffer {
   const pad = s.length % 4 === 2 ? "==" : s.length % 4 === 3 ? "=" : "";
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
   return Buffer.from(b64, "base64");
 }
+
 function hexToBuf(hex: string): Buffer {
   if (!/^[0-9a-f]+$/i.test(hex) || (hex.length & 1)) throw new Error("bad_hex");
   return Buffer.from(hex, "hex");
 }
+
 function leadingZeroBits(buf: Buffer): number {
   let c = 0;
   for (let i = 0; i < buf.length; i++) {

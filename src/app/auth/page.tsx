@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 export default function AuthPage() {
   return (
     <div className="relative min-h-[100svh] bg-white overflow-hidden">
+      <script src="https://unpkg.com/@vkid/sdk@<3.0.0/dist-sdk/umd/index.js"></script>
       <ClientBg />
 
       <div className="relative flex min-h-[100svh] flex-col z-10">

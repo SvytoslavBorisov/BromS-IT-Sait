@@ -1,7 +1,7 @@
 // src/components/auth/login/LoginForm.tsx
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLogin } from "@/hooks/useLogin";
 import { useSearchParams } from "next/navigation";
 import Header from "./parts/Header";
@@ -12,6 +12,7 @@ import SubmitButton from "./parts/SubmitButton";
 import Links from "./parts/Links";
 import Social from "./parts/Social";
 import { ensureHuman } from "@/lib/captcha/ensureHuman";
+
 
 export default function LoginForm() {
   const {
@@ -70,7 +71,6 @@ export default function LoginForm() {
         <Header title="Вход в аккаунт" icon="login" />
       </div>
 
-      {/* Разделитель только на md+ (внутренний, не рамка) */}
       <div className="hidden md:block mx-8 mt-6 border-t border-neutral-100" />
 
       <div className="px-2 md:p-8">
@@ -104,7 +104,9 @@ export default function LoginForm() {
           <Links />
         </form>
 
+        {/* Социальные кнопки через next-auth */}
         <Social />
+
       </div>
     </div>
   );
