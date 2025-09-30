@@ -6,6 +6,3 @@ export interface ParticipantNode {
   managerId: string | null;
   children?: ParticipantNode[];
 }
-
-// заменить в OrgChart.tsx (строка 6)
-

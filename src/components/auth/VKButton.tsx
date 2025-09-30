@@ -1,10 +1,11 @@
+// components/auth/VKButton.tsx
 "use client";
 import { signIn } from "next-auth/react";
 
 export function VKTile() {
   return (
     <button
-      onClick={() => signIn("vk", { callbackUrl: "/" })}
+      onClick={() => signIn("vk", { callbackUrl: "/auth/after-oauth?next=/profile" })}
       className="group relative flex items-center justify-center h-12 rounded-2xl bg-[#0077FF] text-white
                  ring-1 ring-black/10 hover:ring-black/20 transition overflow-hidden
                  hover:scale-[1.03] active:scale-[0.98] duration-200 ease-out"
