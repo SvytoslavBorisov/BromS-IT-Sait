@@ -42,20 +42,25 @@ export async function GET(request: Request) {
     }
   }
 
-  // На dev не поднимать сложность из-за ::1/нестандартного UA
-  const ctx = { ua, ip };
-  const baseRequired = getDifficultyFor(action, ctx);
-  const requiredDifficulty =
-    process.env.NODE_ENV === "production" ? baseRequired : Math.min(baseRequired, 20);
+  // Единая сложность
+  const requiredDifficulty = getDifficultyFor(action, { ua, ip, env: process.env.NODE_ENV });
 
-  const state = signState({ action, ua, ip });
+  // Подписываем state c привязкой к UA/IP и TTL
+  const { state, stateBody, ttlSec } = signState({
+    action,
+    ua,
+    ip,
+    need: requiredDifficulty,
+    ttlSec: 120,
+  });
 
   const res = NextResponse.json(
     {
       ok: true,
-      state,
+      state,      // подписанное "body.sig" (для verify)
+      stateBody,  // ЧИСТЫЙ base64url без padding (для PoW)
       requiredDifficulty,
-      ttlSec: 120, // подсказка фронту
+      ttlSec,
     },
     { status: 200 }
   );

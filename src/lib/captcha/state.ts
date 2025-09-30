@@ -1,186 +1,155 @@
 // src/lib/captcha/state.ts
 import crypto from "crypto";
 
-export type CaptchaAction = "register" | "login" | "resend" | "forgot" | "reset";
+export type CaptchaAction = "login" | "register" | "resend" | "forgot" | "reset";
 
 export const ACTION_SCOPES: Record<CaptchaAction, string[]> = {
+  login:    ["auth:login"],
   register: ["auth:register"],
-  login: ["auth:login"],
-  resend: ["auth:resend"],
-  forgot: ["auth:forgot"],
-  reset: ["auth:reset"],
+  resend:   ["auth:resend"],
+  forgot:   ["auth:forgot"],
+  reset:    ["auth:reset"],
 };
 
-const ALLOWED: CaptchaAction[] = ["register", "login", "resend", "forgot", "reset"];
-export function isAllowedAction(a: unknown): a is CaptchaAction {
-  return typeof a === "string" && (ALLOWED as string[]).includes(a);
+export function isAllowedAction(a: any): a is CaptchaAction {
+  return a === "login" || a === "register" || a === "resend" || a === "forgot" || a === "reset";
 }
 
-/* ================= base64url helpers ================= */
+type Ctx = { ua?: string; ip?: string | null; env?: string | undefined };
 
-function b64url(buf: Buffer) {
+/**
+ * ЕДИНЫЙ источник сложности. Возвращает количество требуемых нулевых бит.
+ * Стратегия: «ощущается быстро» (~0.3–0.8s на типовом железе).
+ * - Мобильные: -2 бита
+ * - Регистрация/забытый пароль: -1 бит
+ * - Dev: не выше 18–19
+ */
+export function getDifficultyFor(action: CaptchaAction, ctx: Ctx): number {
+  const ua = ctx.ua || "";
+  const env = (ctx.env || process.env.NODE_ENV || "production").toLowerCase();
+
+  const isMobile = /Android|iPhone|Mobile/i.test(ua);
+  const isDesktop = /Windows NT|Mac OS X|X11|Linux x86_64/i.test(ua);
+
+  // базовые значения
+  let need =
+    action === "login"   ? 19 :
+    action === "register"? 18 :
+    action === "resend"  ? 17 :
+    action === "forgot"  ? 17 :
+    action === "reset"   ? 18 : 18;
+
+  if (isMobile) need -= 2;
+  else if (!isDesktop) need -= 1;
+
+  // минимальные/максимальные рамки
+  need = Math.max(14, Math.min(22, need));
+
+  // на dev не задираем слишком высоко
+  if (env !== "production") need = Math.min(need, 18);
+
+  return need;
+}
+
+/* --------------------- Подписанный state --------------------- */
+
+type SignedStatePayload = {
+  a: CaptchaAction;   // action
+  t: number;          // timestamp (sec)
+  u: string;          // ua hash (sha256 hex)
+  i?: string;         // ip (обфусцированная/урезанная версия) — опционально
+  n: number;          // need: требуемые нулевые биты
+  x: number;          // ttlSec
+};
+
+const ALG = "sha256";
+
+function hmac(key: Buffer, msg: Buffer): Buffer {
+  return crypto.createHmac(ALG, key).update(msg).digest();
+}
+
+function toB64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
-function fromB64url(s: string) {
-  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+
+function fromB64url(s: string): Buffer {
+  const pad = s.length % 4 === 2 ? "==" : s.length % 4 === 3 ? "=" : "";
   return Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/") + pad, "base64");
 }
 
-/* ================= hashing/secret ================= */
-
-export function hash(x: string) {
-  return crypto.createHash("sha256").update(x).digest("base64url");
+function sha256hex(s: string): string {
+  return crypto.createHash("sha256").update(s, "utf8").digest("hex");
 }
 
-function getCaptchaSecret(): Buffer {
-  const key = process.env.CAPTCHA_STATE_SECRET;
-  if (typeof key !== "string" || key.length < 16) {
-    // Дадим понятное сообщение, чтобы не ловить неясные crypto-ошибки
-    throw new Error("CAPTCHA_STATE_SECRET is not set or too short");
-  }
-  return Buffer.from(key, "utf8");
+function key(): Buffer {
+  const k = process.env.CAPTCHA_STATE_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!k) throw new Error("CAPTCHA_STATE_SECRET/NEXTAUTH_SECRET not set");
+  return Buffer.from(k, "utf8");
 }
 
-/* ================= difficulty policy ================= */
+export function splitSignedState(state: string): { bodyB64: string; sigB64: string } {
+  const dot = state.indexOf(".");
+  if (dot <= 0) throw new Error("bad_state_format");
+  return { bodyB64: state.slice(0, dot), sigB64: state.slice(dot + 1) };
+}
 
-/**
- * Серверная политика сложности PoW.
- * ВАЖНО: клиентское значение difficulty игнорируется при проверке.
- *
- * Базовые уровни:
- *  - register: 22
- *  - login:    20
- *  - resend:   20
- *  - forgot:   20
- *  - reset:    20
- *
- * Лёгкая эвристика анти-бот:
- *  - «подозрительный» UA → +1..2
- *  - пустой/подозрительный IP → +1
- * Ограничено диапазоном [16..28] для разумного UX.
- */
-export function getDifficultyFor(
-  action: CaptchaAction,
-  ctx?: { ua?: string; ip?: string }
-): number {
-  const base: Record<CaptchaAction, number> = {
-    register: 22,
-    login: 20,
-    resend: 20,
-    forgot: 20,
-    reset: 20,
+export function signState(input: {
+  action: CaptchaAction;
+  ua: string;
+  ip?: string | null;
+  need: number;
+  ttlSec?: number;
+}): { state: string; stateBody: string; ttlSec: number } {
+  const ttlSec = Math.max(30, Math.min(300, input.ttlSec ?? 120));
+  const payload: SignedStatePayload = {
+    a: input.action,
+    t: Math.floor(Date.now() / 1000),
+    u: sha256hex(input.ua || ""),
+    i: undefined,
+    n: Math.max(1, Math.min(28, input.need | 0)),
+    x: ttlSec,
   };
 
-  let diff = base[action] ?? 20;
+  const body = Buffer.from(JSON.stringify(payload), "utf8");
+  const sig = hmac(key(), body);
 
-  const ua = (ctx?.ua || "").toLowerCase();
-  const ip = (ctx?.ip || "").trim();
-
-  // Очень простая, но быстрая эвристика;
-  // при желании можно усложнить и учитывать частоту событий через Redis.
-  const badUaHints = [
-    "headless", "phantom", "puppeteer", "selenium",
-    "curl", "wget", "python-requests", "go-http-client",
-  ];
-  if (!ua || badUaHints.some((h) => ua.includes(h))) diff += 2;
-
-  // Пустой/локальный/подозрительный IP → слегка поднимем
-  if (!ip || ip === "::1" || ip.startsWith("127.") || ip.startsWith("0.")) diff += 1;
-
-  // Жёсткие рамки
-  if (diff < 16) diff = 16;
-  if (diff > 28) diff = 28;
-
-  return diff;
+  const bodyB64 = toB64url(body);
+  const sigB64 = toB64url(sig);
+  const state = `${bodyB64}.${sigB64}`;
+  return { state, stateBody: bodyB64, ttlSec };
 }
 
-/* ================= signed state ================= */
-
-export type SignedState = {
-  action: CaptchaAction;
-  ts: number;
-  uaHash: string;
-  ipHash: string;
-  seed: string;      // base64url
-  mac: string;       // base64url(HMAC)
-  rawPayload: string;
-  encoded: string;   // base64url(payload|mac)
-};
-
-/**
- * Подписываем state: action|ts|uaHash|ipHash|seed|mac  (всё в utf8),
- * затем кодируем всю строку base64url без padding.
- */
-export function signState(params: { action: CaptchaAction; ua: string; ip?: string; ttlSec?: number }): string {
-  const ts = Math.floor(Date.now() / 1000);
-  const uaSafe = params.ua || "ua:unknown";
-  const ipSafe = params.ip ?? "";
-  const uaHash = hash(uaSafe);
-  const ipHash = hash(ipSafe);
-  const seed = b64url(crypto.randomBytes(16));
-
-  const payload = `${params.action}|${ts}|${uaHash}|${ipHash}|${seed}`;
-
-  // Храним mac в виде base64url строки, но считаем и сравниваем в байтах
-  const macBytes = crypto.createHmac("sha256", getCaptchaSecret()).update(payload).digest();
-  const mac = b64url(macBytes);
-
-  return b64url(Buffer.from(`${payload}|${mac}`, "utf8"));
-}
-
-/**
- * Верифицируем state. Сравнение подписи выполняется по СЫРЫМ байтам HMAC,
- * чтобы исключить расхождения из-за кодеков строк.
- */
 export function verifyAndParseState(
-  stateB64: string,
-  {
-    action,
-    ua,
-    ip,
-    maxAgeSec = 120, // подсказка: на dev можно поднять до 300 (делаешь это в verify/route.ts)
-  }: { action: CaptchaAction; ua: string; ip?: string; maxAgeSec?: number }
-): { ok: true; state: SignedState } | { ok: false } {
+  state: string,
+  opts: { action: CaptchaAction; ua: string; ip?: string | null; maxAgeSec?: number }
+):
+  | { ok: true; need: number }
+  | { ok: false }
+{
+  if (!state || typeof state !== "string" || !state.includes(".")) return { ok: false };
+  const [bodyB64, sigB64] = state.split(".");
+  const body = fromB64url(bodyB64);
+  const sig = fromB64url(sigB64);
+  const want = hmac(key(), body);
+  if (!crypto.timingSafeEqual(sig, want)) return { ok: false };
+
+  let parsed: SignedStatePayload;
   try {
-    const raw = fromB64url(stateB64).toString("utf8");
-    const parts = raw.split("|");
-    if (parts.length !== 6) return { ok: false };
-
-    const [a, tsStr, uaHash, ipHash, seed, macB64url] = parts;
-    const ts = parseInt(tsStr, 10);
-    if (!Number.isFinite(ts)) return { ok: false };
-
-    const now = Math.floor(Date.now() / 1000);
-    if (a !== action || now - ts > maxAgeSec) return { ok: false };
-
-    const uaSafe = ua || "ua:unknown";
-    const ipSafe = ip ?? "";
-    const wantUa = hash(uaSafe);
-    const wantIp = hash(ipSafe);
-    if (uaHash !== wantUa || ipHash !== wantIp) return { ok: false };
-
-    const payload = `${a}|${ts}|${uaHash}|${ipHash}|${seed}`;
-    const wantMacBytes = crypto.createHmac("sha256", getCaptchaSecret()).update(payload).digest();
-    const macBytes = fromB64url(macB64url);
-
-    // Сравниваем именно байты одинаковой длины; при расхождении длины вернём false
-    if (macBytes.length !== wantMacBytes.length) return { ok: false };
-    if (!crypto.timingSafeEqual(macBytes, wantMacBytes)) return { ok: false };
-
-    return {
-      ok: true,
-      state: {
-        action: a as CaptchaAction,
-        ts,
-        uaHash,
-        ipHash,
-        seed,
-        mac: macB64url,
-        rawPayload: payload,
-        encoded: stateB64,
-      },
-    };
+    parsed = JSON.parse(body.toString("utf8"));
   } catch {
     return { ok: false };
   }
+
+  if (parsed.a !== opts.action) return { ok: false };
+
+  // строгая привязка к UA
+  if (!parsed.u || parsed.u !== sha256hex(opts.ua || "")) return { ok: false };
+
+  const now = Math.floor(Date.now() / 1000);
+  const age = now - parsed.t;
+  const maxAge = Math.max(10, Math.min(parsed.x || 120, opts.maxAgeSec ?? 180));
+  if (age < 0 || age > maxAge) return { ok: false };
+
+  const need = Math.max(1, Math.min(28, parsed.n | 0));
+  return { ok: true, need };
 }

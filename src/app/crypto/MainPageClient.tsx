@@ -3,11 +3,11 @@
 
 import React from "react";
 import Header from "@/components/Header";
-import Footer from "@/components/Footer";
+import Footer from "@/components/landing/Footer";
 import HeroSection from "@/components/HeroSection";
-import AboutSection from "@/components/AboutSection";
-import ProjectsSection from "@/components/ProjectSection";
-import ContactSection from "@/components/ContactSection";
+import AboutSection from "@/components/landing/AboutSection";
+import ProjectsSection from "@/components/landing/ProjectsSection";
+import ContactSection from "@/components/landing/ContactSection";
 import SectionDivider from "@/components/SectionDivider";
 import SectionDividerBW from "@/components/SectionDividerBW";
 import GlobalLightAbstractBg from "./GlobalLightAbstractBg";
@@ -15,9 +15,6 @@ import GlobalLightAbstractBg from "./GlobalLightAbstractBg";
 export default function MainPageClient() {
   return (
     <div className="relative bg-white text-neutral-900">
-      {/* ЕДИНЫЙ светлый абстрактный фон для всех белых секций */}
-      <GlobalLightAbstractBg />
-
       {/* hairline под шапкой */}
       <div
         aria-hidden
@@ -36,7 +33,6 @@ export default function MainPageClient() {
         <ProjectsSection />
         <SectionDivider flip />
         <ContactSection />
-        <SectionDividerBW />
       </main>
 
       <Footer />

@@ -10,7 +10,7 @@ export async function ensureHuman(
   if (existing) return existing;
 
   const p = (async () => {
-    // 1) Берём подписанный state + требуемую сложность у сервера
+    // 1) state + сложность + (возможный) skip
     const res = await fetch(
       `/api/captcha/state?act=${encodeURIComponent(action)}`,
       { cache: "no-store", credentials: "include" }
@@ -18,28 +18,31 @@ export async function ensureHuman(
     const data = await res.json().catch(() => ({} as any));
     if (!res.ok) throw new Error("captcha_state_failed");
 
-    // FAST-PATH: сервер сказал, что уже есть валидный HPT
     if (data?.skip) return;
-
     if (!data?.state) throw new Error("captcha_state_missing");
 
-    const requiredDifficulty: number = Number(data.requiredDifficulty ?? 20);
+    // Берём для PoW ЧИСТЫЙ base64url: stateBody, а если его нет — первая часть state
+    const stateBody: string =
+      typeof data.stateBody === "string" && data.stateBody.includes(".") === false
+        ? data.stateBody
+        : String(data.state).split(".")[0];
 
-    // Подбор параметров под устройство
+    const requiredDifficulty: number = Number(data.requiredDifficulty ?? 18);
+
     const isMobile = /Android|iPhone|Mobile/i.test(navigator.userAgent);
     const yieldEvery = isMobile ? 2048 : 8192;
-    const timeoutMs = isMobile ? 10_000 : 12_000;
+    const timeoutMs = isMobile ? 12_000 : 20_000;
 
-    // 2) Решаем PoW на клиенте строго на серверной сложности
+    // 2) Решаем PoW по stateBody
     const pow = await solvePow({
-      stateB64: data.state,
+      stateB64: stateBody,
       action,
       difficulty: requiredDifficulty,
       timeoutMs,
       yieldEvery,
     });
 
-    // 3) Серверная верификация и выпуск HPT (HttpOnly cookie)
+    // 3) Верификация (шлём ПОЛНЫЙ state)
     const v = await fetch("/api/captcha/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

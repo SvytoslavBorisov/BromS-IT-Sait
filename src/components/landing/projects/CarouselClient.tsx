@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/** ====== Типы пропсов (readonly) ====== */
+/** ====== Типы пропсов ====== */
 interface Props {
   readonly sections: readonly string[]; // массив HTML-слайдов
   readonly basePath?: string;           // базовый путь для относительных ссылок (по умолчанию /projects/)
@@ -11,19 +11,15 @@ interface Props {
 function stableHash(input: string): string {
   let h = 5381;
   for (let i = 0; i < input.length; i++) h = (h * 33) ^ input.charCodeAt(i);
-  // превращаем в положительный и шорт-хекс
   return (h >>> 0).toString(16);
 }
 
-/** Ребейз относительных ссылок + форсируем ленивую загрузку изображений */
+/** Ребейз относительных ссылок + лёгкие атрибуты изображений */
 function rebaseRelativeUrls(html: string, base = "/projects/") {
-  // src/href/poster -> абсолютные
   const common = html.replace(
     /(src|href|poster)=["'](?!https?:|\/|data:|#)([^"']+)["']/gi,
-    (_m, attr, url) => `${attr}="${base}${url.replace(/^\.?\//, "")}"`
+    (_m, attr, url) => `${attr}="${base}${url.replace(/^\.?\//, "")}"`,
   );
-
-  // srcset -> абсолютные
   const withSrcset = common.replace(
     /(srcset)=["']([^"']+)["']/gi,
     (_m, attr, value) => {
@@ -34,39 +30,32 @@ function rebaseRelativeUrls(html: string, base = "/projects/") {
         return d ? `${abs} ${d}` : abs;
       });
       return `${attr}="${items.join(", ")}"`;
-    }
+    },
   );
-
-  // Принудительно лёгкая загрузка для <img ...>
-  // добавим loading="lazy" decoding="async" если их нет
-  const withImgPerf = withSrcset.replace(
+  return withSrcset.replace(
     /<img\b([^>]*)>/gi,
     (m, attrs) => {
       const hasLoading = /\bloading=/.test(attrs);
       const hasDecoding = /\bdecoding=/.test(attrs);
       const hasFetchPriority = /\bfetchpriority=/.test(attrs);
-
       const extra =
         (hasLoading ? "" : ' loading="lazy"') +
         (hasDecoding ? "" : ' decoding="async"') +
         (hasFetchPriority ? "" : ' fetchpriority="low"');
-
       return `<img${attrs}${extra}>`;
-    }
+    },
   );
-
-  return withImgPerf;
 }
 
-/** Хук: матчим мобильный брейкпоинт (<= 640px) */
+/** Хук: мобильный брейкпоинт (<= 768px) */
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    return window.matchMedia("(max-width: 640px)").matches;
+    return window.matchMedia("(max-width: 768px)").matches;
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 640px)");
+    const mq = window.matchMedia("(max-width: 768px)");
     const handler = () => setIsMobile(mq.matches);
     mq.addEventListener?.("change", handler);
     return () => mq.removeEventListener?.("change", handler);
@@ -74,60 +63,94 @@ function useIsMobile() {
   return isMobile;
 }
 
+/** Хук: поддержка reduce motion */
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => setReduced(mq.matches);
+    apply();
+    mq.addEventListener?.("change", apply);
+    return () => mq.removeEventListener?.("change", apply);
+  }, []);
+  return reduced;
+}
+
 /** Главный компонент */
 export default function CarouselClient({ sections, basePath = "/projects/" }: Props) {
   const total = sections.length;
-  const [current, setCurrent] = useState(0);
   const isMobile = useIsMobile();
+  const reduced = useReducedMotion();
 
   /** Готовим HTML с ребейзом ссылок и прокачкой img */
   const slides = useMemo(
     () => sections.map((s) => rebaseRelativeUrls(s, basePath)),
-    [sections, basePath]
+    [sections, basePath],
   );
 
   /** Стабильные ключи по содержимому */
   const keys = useMemo(() => slides.map((s) => stableHash(s)), [slides]);
 
-  const prev = () => setCurrent((c) => (c - 1 + total) % total);
-  const next = () => setCurrent((c) => (c + 1) % total);
-  const goTo = (i: number) => setCurrent(i);
+  /** Текущее состояние */
+  const [current, setCurrent] = useState(0);
+  const clampIndex = (i: number) => (total === 0 ? 0 : (i + total) % total);
+  const prev = () => setCurrent((c) => clampIndex(c - 1));
+  const next = () => setCurrent((c) => clampIndex(c + 1));
+  const goTo = (i: number) => setCurrent(clampIndex(i));
 
-  // Клавиши ← →
+  /** Управление клавиатурой (доступность) */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") prev();
       if (e.key === "ArrowRight") next();
     };
-    window.addEventListener("keydown", onKey, { passive: true } as any);
+    window.addEventListener("keydown", onKey as any, { passive: true } as any);
     return () => window.removeEventListener("keydown", onKey as any);
   }, [total]);
 
-  // Свайпы (passive handlers-friendly)
-  const startX = useRef<number | null>(null);
-  const onTouchStart = (e: React.TouchEvent) => (startX.current = e.touches[0].clientX);
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (startX.current == null) return;
-    const dx = e.changedTouches[0].clientX - startX.current;
-    startX.current = null;
-    if (Math.abs(dx) > 40) (dx > 0 ? prev() : next());
+  /** Свайпы/drag через Pointer Events (работает и на мыши, и на тач) */
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<{ active: boolean; startX: number; dx: number }>({ active: false, startX: 0, dx: 0 });
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    drag.current = { active: true, startX: e.clientX, dx: 0 };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!drag.current.active) return;
+    drag.current.dx = e.clientX - drag.current.startX;
+    if (trackRef.current && !isMobile) {
+      // подсдвиг трека при drag (десктоп)
+      trackRef.current.style.transform = `translateX(calc(-${current * 100}% + ${drag.current.dx}px))`;
+    }
+  };
+  const onPointerUp = () => {
+    if (!drag.current.active) return;
+    const dx = drag.current.dx;
+    drag.current.active = false;
+    drag.current.dx = 0;
+
+    const threshold = 40; // порог свайпа
+    if (dx > threshold) prev();
+    else if (dx < -threshold) next();
+    // откат трансформа
+    if (trackRef.current) {
+      trackRef.current.style.transform = `translateX(-${current * 100}%)`;
+    }
   };
 
   if (total === 0) {
     return (
       <div className="relative w-full h-[360px] md:h-[520px] grid place-items-center">
-        <span className="rounded-full bg-white/70 px-4 py-2 backdrop-blur ring-1 ring-black/10 text-neutral-700">
+        <span className="rounded-full bg-white px-4 py-2 ring-1 ring-black/10 text-neutral-700">
           Загрузка…
         </span>
       </div>
     );
   }
 
-  /** ====== Мобильный режим: супер-лёгкий ======
-   * - Монтируем только текущий слайд (без соседей) — минимальный DOM
-   * - Без теней/градиентов
-   * - Плавная, но очень лёгкая анимация (opacity/transform, короткая)
-   */
+  /** ====== Мобильный режим: один слайд, лёгкие кнопки/точки ====== */
   if (isMobile) {
     const html = slides[current];
     const k = keys[current];
@@ -135,22 +158,24 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
       <section
         aria-label="Портфолио — карусель"
         className="relative w-full h-[min(72svh,520px)]"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
       >
+        {/* текущий слайд (монтируем только его) */}
         <div
           key={k}
-          // простая лёгкая анимация появления
-          className="absolute inset-0 transition-opacity duration-250 ease-out will-change-opacity"
+          className={`absolute inset-0 ${reduced ? "" : "transition-opacity duration-200 ease-out"} will-change-opacity`}
           style={{ opacity: 1 }}
           dangerouslySetInnerHTML={{ __html: html }}
         />
-        {/* Стрелки — компактные, без теней */}
+
+        {/* Стрелки — простые, без блюра */}
         <button
           aria-label="Предыдущий"
           onClick={prev}
           className="absolute left-2 top-1/2 -translate-y-1/2 z-20 grid place-items-center
-                     h-9 w-9 rounded-full bg-white/85 hover:bg-white transition ring-1 ring-black/10"
+                     h-9 w-9 rounded-full bg-white hover:bg-neutral-50 transition ring-1 ring-black/10 shadow-sm"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" className="text-neutral-900" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" />
@@ -160,15 +185,15 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
           aria-label="Следующий"
           onClick={next}
           className="absolute right-2 top-1/2 -translate-y-1/2 z-20 grid place-items-center
-                     h-9 w-9 rounded-full bg-white/85 hover:bg-white transition ring-1 ring-black/10"
+                     h-9 w-9 rounded-full bg-white hover:bg-neutral-50 transition ring-1 ring-black/10 shadow-sm"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" className="text-neutral-900" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 18l6-6-6-6" />
           </svg>
         </button>
 
-        {/* Точки — минимальные */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4">
+        {/* Точки */}
+        <nav className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4" aria-label="Навигация по слайдам">
           {slides.map((_s, idx) => {
             const active = idx === current;
             return (
@@ -177,12 +202,12 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
                 onClick={() => goTo(idx)}
                 aria-label={`Слайд ${idx + 1}`}
                 aria-current={active ? "true" : undefined}
-                className={`h-2 w-2 rounded-full transition
+                className={`h-2 w-2 rounded-full transition outline-none focus:ring-2 focus:ring-black/20
                             ${active ? "bg-neutral-900" : "bg-neutral-300 hover:bg-neutral-400"}`}
               />
             );
           })}
-        </div>
+        </nav>
       </section>
     );
   }
@@ -192,14 +217,16 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
     <section
       aria-label="Портфолио — карусель"
       className="relative w-full h-[clamp(420px,70svh,720px)]"
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
     >
       {/* Клиппер */}
-      <div className="absolute inset-0 overflow-hidden rounded-none md:rounded-xl shadow-[0_40px_140px_-40px_rgba(0,0,0,0.25)]">
+      <div className="absolute inset-0 overflow-hidden md:rounded-xl ">
         {/* Трек */}
         <div
-          className="relative flex h-full w-full will-change-transform transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"
+          ref={trackRef}
+          className={`relative flex h-full w-full will-change-transform ${reduced ? "" : "transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"}`}
           style={{ transform: `translateX(-${current * 100}%)` }}
         >
           {slides.map((html, idx) => (
@@ -214,9 +241,9 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
                 "
                 dangerouslySetInnerHTML={{ __html: html }}
               />
-              {/* Мягкие боковые шторки */}
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-white/60 via-white/0 to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-white/60 via-white/0 to-transparent" />
+              {/* Шторки (лёгкие, без backdrop-blur) */}
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-white via-white/60 to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-white via-white/60 to-transparent" />
             </div>
           ))}
         </div>
@@ -227,8 +254,8 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
         aria-label="Предыдущий"
         onClick={prev}
         className="absolute left-3 top-1/2 -translate-y-1/2 z-20 grid place-items-center
-                   h-10 w-10 rounded-full bg-white/80 hover:bg-white transition
-                   ring-1 ring-black/10 backdrop-blur shadow-sm"
+                   h-10 w-10 rounded-full bg-white hover:bg-neutral-50 transition
+                   ring-1 ring-black/10 shadow-sm outline-none focus:ring-2 focus:ring-black/20"
       >
         <svg width="22" height="22" viewBox="0 0 24 24" className="text-neutral-900" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M15 18l-6-6 6-6" />
@@ -238,8 +265,8 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
         aria-label="Следующий"
         onClick={next}
         className="absolute right-3 top-1/2 -translate-y-1/2 z-20 grid place-items-center
-                   h-10 w-10 rounded-full bg-white/80 hover:bg-white transition
-                   ring-1 ring-black/10 backdrop-blur shadow-sm"
+                   h-10 w-10 rounded-full bg-white hover:bg-neutral-50 transition
+                   ring-1 ring-black/10 shadow-sm outline-none focus:ring-2 focus:ring-black/20"
       >
         <svg width="22" height="22" viewBox="0 0 24 24" className="text-neutral-900" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M9 18l6-6-6-6" />
@@ -247,7 +274,7 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
       </button>
 
       {/* Точки */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-6">
+      <nav className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-6" aria-label="Навигация по слайдам">
         {slides.map((_s, idx) => {
           const active = idx === current;
           return (
@@ -256,12 +283,14 @@ export default function CarouselClient({ sections, basePath = "/projects/" }: Pr
               onClick={() => goTo(idx)}
               aria-label={`Слайд ${idx + 1}`}
               aria-current={active ? "true" : undefined}
-              className={`h-[10px] w-[10px] rounded-full ring-1 transition
+              className={`h-[10px] w-[10px] rounded-full ring-1 transition outline-none focus:ring-2 focus:ring-black/20
                           ${active ? "bg-neutral-900 ring-black/20 scale-110" : "bg-neutral-300 ring-black/10 hover:bg-neutral-400"}`}
             />
           );
         })}
-      </div>
+      </nav>
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3 md:h-2 bg-gradient-to-t from-white via-white/80 to-transparent" />
     </section>
   );
 }
