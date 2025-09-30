@@ -1,15 +1,19 @@
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
 import { Sex, Prisma } from "@prisma/client";
 import { hash as bcryptHash } from "bcryptjs";
-
 import { prisma } from "@/lib/prisma";
 import { jwkFingerprint } from "@/lib/crypto/fingerprint";
 import { generateVerificationToken } from "@/lib/auth/tokens";
 import { sendVerificationEmail } from "@/lib/auth/email";
-
-// ▼ ДОБАВЬ:
 import { verifyHPT } from "@/lib/captcha/hpt";
 import { extractIpUa } from "@/lib/auth/utils";
+import { cookies } from "next/headers";
+import { withTimeout } from "@/lib/auth/email-timeout";
+
 
 export async function GET() {
   return NextResponse.json(
@@ -21,48 +25,26 @@ export async function GET() {
   );
 }
 
+
 export async function POST(request: Request) {
   try {
-    // ▼ НОВОЕ: проверяем HPT (auth:register)
+    // 1) HPT
     const { ip, ua } = extractIpUa(request);
-    // ОСТАВЛЕНО КАК ЕСТЬ (без пункта 2): парсим cookie вручную из заголовка
-    const cookie = (request.headers as any)?.get?.("cookie") || "";
-    const hpt =
-      cookie
-        .split(/;\s*/)
-        .find((c: string) => c.startsWith("hpt="))
-        ?.split("=")[1] ?? "";
-
+    const hpt = (await cookies()).get("hpt")?.value || "";
     if (!hpt || !verifyHPT(hpt, { ua, ip, requireScope: "auth:register" })) {
       return NextResponse.json({ error: "captcha_required" }, { status: 403 });
     }
 
+    // 2) Параметры
     const body = await request.json();
     const {
-      email,
-      password,
-      name,
-      surname,
-      patronymic,
-      age,
-      sex,
-      image,
-      managerId,
-      companyId,
-      positionId,
-      departmentId,
-      publicKey,
+      email, password, name, surname, patronymic, age, sex, image,
+      managerId, companyId, positionId, departmentId, publicKey,
     } = body ?? {};
 
-    // Нормализация email
     const normEmail = String(email ?? "").trim().toLowerCase();
-
-    // Базовая валидация
     if (!normEmail || !password) {
-      return NextResponse.json(
-        { error: "Поля email и password обязательны" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Поля email и password обязательны" }, { status: 400 });
     }
     if (!publicKey || typeof publicKey !== "object") {
       return NextResponse.json(
@@ -138,80 +120,54 @@ export async function POST(request: Request) {
       );
     }
 
-    // Хэш пароля (UserPassword)
     const passwordHash = await bcryptHash(password, 10);
-
-    // Отпечаток ключа (считаем на сервере)
     const fingerprint = await jwkFingerprint(publicKey);
 
-    // Создаём пользователя (emailVerified оставляем null до подтверждения)
+    // 4) Создание пользователя
     const user = await prisma.user.create({
       data: {
         email: normEmail,
         name: name ?? null,
         surname: surname ?? null,
         patronymic: patronymic ?? null,
-        age: ageDate,
-        sex: sexEnum,
+        age: age ? new Date(age) : null,
+        sex: sex ? (String(sex).toUpperCase() as Sex) : null,
         image: image ?? null,
         managerId: managerId || null,
         companyId: companyId || null,
         positionId: positionId || null,
         departmentId: departmentId || null,
-
-        // ГОСТ-транспортный публичный ключ
-        e2ePublicKey: publicKey as Prisma.JsonObject, // Json
+        e2ePublicKey: publicKey as Prisma.JsonObject,
         e2ePublicKeyAlg: "ECIES-GOST-2012-256",
-        e2ePublicKeyFingerprint: fingerprint, // String @unique
-
-        // Пароль — через связанную сущность
+        e2ePublicKeyFingerprint: fingerprint,
         password: { create: { hash: passwordHash } },
-
         emailVerified: null,
       },
       select: { id: true, email: true },
     });
 
-    // === Создаём verification token и отправляем письмо ===
+    // 5) Токен верификации + письмо с таймаутом
     const { token, hashedToken, expires } = generateVerificationToken(24);
-
-    // Один активный токен на email: атомарно чистим и создаём новый
     await prisma.$transaction([
-      prisma.verificationToken.deleteMany({
-        where: { identifier: user.email },
-      }),
-      prisma.verificationToken.create({
-        data: {
-          identifier: user.email,
-          token: hashedToken,
-          expires,
-        },
-      }),
+      prisma.verificationToken.deleteMany({ where: { identifier: user.email } }),
+      prisma.verificationToken.create({ data: { identifier: user.email, token: hashedToken, expires } }),
     ]);
 
-    // Сборка абсолютной ссылки на verify-роут
     const origin = process.env.APP_BASE_URL || new URL(request.url).origin;
     const verifyUrl = new URL("/api/auth/verify", origin);
     verifyUrl.searchParams.set("token", token);
     verifyUrl.searchParams.set("email", user.email);
 
-    // Отправляем письмо
-    await sendVerificationEmail(user.email, verifyUrl.toString());
+    void withTimeout(sendVerificationEmail(user.email, verifyUrl.toString()), 4000, "sendVerificationEmail")
+      .then(ok => { if (!ok) console.warn("sendVerificationEmail timeout/failed for", user.email); });
 
-    // Возвращаем нейтральный ответ (не логиним до подтверждения)
+    // 6) Ответ мгновенно
     return NextResponse.json(
-      {
-        ok: true,
-        message:
-          "Регистрация принята. Проверьте e-mail и подтвердите адрес, чтобы войти.",
-      },
+      { ok: true, message: "Регистрация принята. Проверьте e-mail и подтвердите адрес." },
       { status: 201 }
     );
   } catch (error) {
     console.error("Ошибка при регистрации:", error);
-    return NextResponse.json(
-      { error: "Внутренняя ошибка сервера" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Внутренняя ошибка сервера" }, { status: 500 });
   }
 }
