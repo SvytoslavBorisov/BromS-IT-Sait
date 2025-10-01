@@ -1,3 +1,4 @@
+// src/app/api/auth/register/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,8 +13,24 @@ import { sendVerificationEmail } from "@/lib/auth/email";
 import { verifyHPT } from "@/lib/captcha/hpt";
 import { extractIpUa } from "@/lib/auth/utils";
 import { cookies } from "next/headers";
-import { withTimeout } from "@/lib/auth/email-timeout";
+import { createHash } from "crypto";
 
+function assertSmtpEnvAndLog() {
+  const host = (process.env.SMTP_HOST || "").trim();
+  const user = (process.env.SMTP_USER || "").trim();
+  const pass = (process.env.SMTP_PASS || "").trim();
+  const port = Number(process.env.SMTP_PORT || 465);
+  const authMethod = (process.env.SMTP_AUTH_METHOD || "PLAIN").trim();
+
+  if (!host) throw new Error("SMTP_HOST is not set");
+  if (!user) throw new Error("SMTP_USER is not set");
+  if (!pass) throw new Error("SMTP_PASS is not set");
+
+  const sha = createHash("sha256").update(pass).digest("hex");
+  console.log(
+    `[register] SMTP env ok: user=${user} port=${port} authMethod=${authMethod} pass.len=${pass.length} pass.sha256=${sha}`
+  );
+}
 
 export async function GET() {
   return NextResponse.json(
@@ -24,7 +41,6 @@ export async function GET() {
     { status: 200 }
   );
 }
-
 
 export async function POST(request: Request) {
   try {
@@ -53,10 +69,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Проверка, что пользователя ещё нет
-    const existing = await prisma.user.findUnique({
-      where: { email: normEmail },
-    });
+    // Уже есть такой e-mail?
+    const existing = await prisma.user.findUnique({ where: { email: normEmail } });
     if (existing) {
       return NextResponse.json(
         { error: "Пользователь с таким email уже существует" },
@@ -64,23 +78,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Приведение даты рождения
+    // age
     let ageDate: Date | null = null;
     if (age) {
       const d = new Date(age);
       if (isNaN(d.getTime())) {
         return NextResponse.json(
-          {
-            error:
-              "Поле age должно быть корректной датой (например, 1999-12-31)",
-          },
+          { error: "Поле age должно быть корректной датой (например, 1999-12-31)" },
           { status: 400 }
         );
       }
       ageDate = d;
     }
 
-    // Валидация пола
+    // sex
     let sexEnum: Sex | null = null;
     if (sex !== undefined && sex !== null) {
       const upper = String(sex).toUpperCase();
@@ -93,79 +104,93 @@ export async function POST(request: Request) {
       sexEnum = upper as Sex;
     }
 
-    // Валидация JWK (публичный ключ ГОСТ-2012-256)
-    // Требуем EC-кривую ГОСТ-2012-256, координаты x/y и отсутствие d (приватника)
-    if (publicKey.kty !== "EC") {
-      return NextResponse.json(
-        { error: "JWK.kty должен быть 'EC'" },
-        { status: 400 }
-      );
-    }
-    if (publicKey.crv !== "GOST-2012-256") {
-      return NextResponse.json(
-        { error: "JWK.crv должен быть 'GOST-2012-256'" },
-        { status: 400 }
-      );
-    }
-    if (!publicKey.x || !publicKey.y) {
-      return NextResponse.json(
-        { error: "JWK должен содержать координаты x и y" },
-        { status: 400 }
-      );
-    }
-    if (publicKey.d) {
-      return NextResponse.json(
-        { error: "Публичный JWK не должен содержать поле d" },
-        { status: 400 }
-      );
-    }
+    // JWK ГОСТ-2012-256
+    if (publicKey.kty !== "EC") return NextResponse.json({ error: "JWK.kty должен быть 'EC'" }, { status: 400 });
+    if (publicKey.crv !== "GOST-2012-256") return NextResponse.json({ error: "JWK.crv должен быть 'GOST-2012-256'" }, { status: 400 });
+    if (!publicKey.x || !publicKey.y) return NextResponse.json({ error: "JWK должен содержать координаты x и y" }, { status: 400 });
+    if (publicKey.d) return NextResponse.json({ error: "Публичный JWK не должен содержать поле d" }, { status: 400 });
 
+    // Подготовка
     const passwordHash = await bcryptHash(password, 10);
     const fingerprint = await jwkFingerprint(publicKey);
-
-    // 4) Создание пользователя
-    const user = await prisma.user.create({
-      data: {
-        email: normEmail,
-        name: name ?? null,
-        surname: surname ?? null,
-        patronymic: patronymic ?? null,
-        age: age ? new Date(age) : null,
-        sex: sex ? (String(sex).toUpperCase() as Sex) : null,
-        image: image ?? null,
-        managerId: managerId || null,
-        companyId: companyId || null,
-        positionId: positionId || null,
-        departmentId: departmentId || null,
-        e2ePublicKey: publicKey as Prisma.JsonObject,
-        e2ePublicKeyAlg: "ECIES-GOST-2012-256",
-        e2ePublicKeyFingerprint: fingerprint,
-        password: { create: { hash: passwordHash } },
-        emailVerified: null,
-      },
-      select: { id: true, email: true },
-    });
-
-    // 5) Токен верификации + письмо с таймаутом
-    const { token, hashedToken, expires } = generateVerificationToken(24);
-    await prisma.$transaction([
-      prisma.verificationToken.deleteMany({ where: { identifier: user.email } }),
-      prisma.verificationToken.create({ data: { identifier: user.email, token: hashedToken, expires } }),
-    ]);
-
     const origin = process.env.APP_BASE_URL || new URL(request.url).origin;
+
+    const { token, hashedToken, expires } = generateVerificationToken(24);
     const verifyUrl = new URL("/api/auth/verify", origin);
     verifyUrl.searchParams.set("token", token);
-    verifyUrl.searchParams.set("email", user.email);
+    verifyUrl.searchParams.set("email", normEmail);
 
-    void withTimeout(sendVerificationEmail(user.email, verifyUrl.toString()), 4000, "sendVerificationEmail")
-      .then(ok => { if (!ok) console.warn("sendVerificationEmail timeout/failed for", user.email); });
+    // Проверим SMTP env в этом код-пути
+    assertSmtpEnvAndLog();
 
-    // 6) Ответ мгновенно
-    return NextResponse.json(
-      { ok: true, message: "Регистрация принята. Проверьте e-mail и подтвердите адрес." },
-      { status: 201 }
-    );
+    // Создаём пользователя и токен; если письмо не уйдёт — откатим
+    let user: { id: string; email: string } | null = null;
+
+    try {
+      user = await prisma.user.create({
+        data: {
+          email: normEmail,
+          name: name ?? null,
+          surname: surname ?? null,
+          patronymic: patronymic ?? null,
+          age: ageDate,
+          sex: sexEnum,
+          image: image ?? null,
+          managerId: managerId || null,
+          companyId: companyId || null,
+          positionId: positionId || null,
+          departmentId: departmentId || null,
+          e2ePublicKey: publicKey as Prisma.JsonObject,
+          e2ePublicKeyAlg: "ECIES-GOST-2012-256",
+          e2ePublicKeyFingerprint: fingerprint,
+          password: { create: { hash: passwordHash } },
+          emailVerified: null,
+        },
+        select: { id: true, email: true },
+      });
+
+      await prisma.$transaction([
+        prisma.verificationToken.deleteMany({ where: { identifier: user.email } }),
+        prisma.verificationToken.create({ data: { identifier: user.email, token: hashedToken, expires } }),
+      ]);
+
+      await sendVerificationEmail(user.email, verifyUrl.toString());
+
+      return NextResponse.json(
+        { ok: true, message: "Регистрация принята. Проверьте e-mail и подтвердите адрес." },
+        { status: 201 }
+      );
+    } catch (e: any) {
+      if (user) {
+        try {
+          await prisma.$transaction([
+            prisma.verificationToken.deleteMany({ where: { identifier: user.email } }),
+            prisma.user.delete({ where: { id: user.id } }),
+          ]);
+        } catch (cleanupErr) {
+          console.error("Cleanup after email send failure failed:", cleanupErr);
+        }
+      }
+
+      const code = e?.responseCode || e?.code;
+      if (code === 535 || code === "EAUTH") {
+        return NextResponse.json(
+          { ok: false, error: "email_send_error", message: "SMTP аутентификация не прошла. Проверьте SMTP_USER/SMTP_PASS." },
+          { status: 502 }
+        );
+      }
+      if (code === "ETIMEDOUT" || String(e?.message || "").toLowerCase().includes("timeout")) {
+        return NextResponse.json(
+          { ok: false, error: "email_send_timeout", message: "Таймаут при отправке письма. Повторите позже." },
+          { status: 504 }
+        );
+      }
+      console.error("sendVerificationEmail failed:", e);
+      return NextResponse.json(
+        { ok: false, error: "email_send_error", message: "Ошибка при отправке письма подтверждения." },
+        { status: 502 }
+      );
+    }
   } catch (error) {
     console.error("Ошибка при регистрации:", error);
     return NextResponse.json({ error: "Внутренняя ошибка сервера" }, { status: 500 });
