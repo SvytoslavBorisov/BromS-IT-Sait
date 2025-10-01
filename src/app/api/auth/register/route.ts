@@ -9,26 +9,29 @@ import { hash as bcryptHash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { jwkFingerprint } from "@/lib/crypto/fingerprint";
 import { generateVerificationToken } from "@/lib/auth/tokens";
-import { sendVerificationEmail } from "@/lib/auth/email";
+// ⬇️ шлём через Mail.ru
+import { sendVerificationEmail } from "@/lib/auth/email_mail";
 import { verifyHPT } from "@/lib/captcha/hpt";
 import { extractIpUa } from "@/lib/auth/utils";
 import { cookies } from "next/headers";
 import { createHash } from "crypto";
 
-function assertSmtpEnvAndLog() {
-  const host = (process.env.SMTP_HOST || "").trim();
-  const user = (process.env.SMTP_USER || "").trim();
-  const pass = (process.env.SMTP_PASS || "").trim();
-  const port = Number(process.env.SMTP_PORT || 465);
-  const authMethod = (process.env.SMTP_AUTH_METHOD || "PLAIN").trim();
+/** Проверяем, что заданы переменные окружения для SMTP Mail.ru и логируем без утечек */
+function assertMailruEnvAndLog() {
+  const user = (process.env.MAILRU_USER || "").trim();
+  const pass = (process.env.MAILRU_PASS || "").trim();
+  const port = Number(process.env.MAILRU_PORT || 465);
+  const host = "smtp.mail.ru";
 
-  if (!host) throw new Error("SMTP_HOST is not set");
-  if (!user) throw new Error("SMTP_USER is not set");
-  if (!pass) throw new Error("SMTP_PASS is not set");
+  if (!user) throw new Error("MAILRU_USER is not set");
+  if (!pass) throw new Error("MAILRU_PASS is not set");
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error("MAILRU_PORT is not a valid number");
+  }
 
   const sha = createHash("sha256").update(pass).digest("hex");
   console.log(
-    `[register] SMTP env ok: user=${user} port=${port} authMethod=${authMethod} pass.len=${pass.length} pass.sha256=${sha}`
+    `[register] Mail.ru SMTP env ok: host=${host} user=${user} port=${port} pass.len=${pass.length} pass.sha256=${sha}`
   );
 }
 
@@ -120,8 +123,8 @@ export async function POST(request: Request) {
     verifyUrl.searchParams.set("token", token);
     verifyUrl.searchParams.set("email", normEmail);
 
-    // Проверим SMTP env в этом код-пути
-    assertSmtpEnvAndLog();
+    // Проверим SMTP (Mail.ru) env в этом код-пути
+    assertMailruEnvAndLog();
 
     // Создаём пользователя и токен; если письмо не уйдёт — откатим
     let user: { id: string; email: string } | null = null;
@@ -154,6 +157,7 @@ export async function POST(request: Request) {
         prisma.verificationToken.create({ data: { identifier: user.email, token: hashedToken, expires } }),
       ]);
 
+      // ⬇️ Отправляем письмо через Mail.ru
       await sendVerificationEmail(user.email, verifyUrl.toString());
 
       return NextResponse.json(
@@ -175,17 +179,17 @@ export async function POST(request: Request) {
       const code = e?.responseCode || e?.code;
       if (code === 535 || code === "EAUTH") {
         return NextResponse.json(
-          { ok: false, error: "email_send_error", message: "SMTP аутентификация не прошла. Проверьте SMTP_USER/SMTP_PASS." },
+          { ok: false, error: "email_send_error", message: "Mail.ru SMTP аутентификация не прошла. Проверьте MAILRU_USER/MAILRU_PASS." },
           { status: 502 }
         );
       }
       if (code === "ETIMEDOUT" || String(e?.message || "").toLowerCase().includes("timeout")) {
         return NextResponse.json(
-          { ok: false, error: "email_send_timeout", message: "Таймаут при отправке письма. Повторите позже." },
+          { ok: false, error: "email_send_timeout", message: "Таймаут при отправке письма через Mail.ru. Повторите позже." },
           { status: 504 }
         );
       }
-      console.error("sendVerificationEmail failed:", e);
+      console.error("sendVerificationEmail (Mail.ru) failed:", e);
       return NextResponse.json(
         { ok: false, error: "email_send_error", message: "Ошибка при отправке письма подтверждения." },
         { status: 502 }
