@@ -1,44 +1,63 @@
 // src/lib/auth/email.ts
 import { createTransport, Transporter } from "nodemailer";
 
+/** Небольшие утилиты */
+function hasAngleAddress(v: string) {
+  return /<[^>]+>/.test(v);
+}
+function extractAddress(v: string) {
+  const m = v.match(/<([^>]+)>/);
+  return m ? m[1] : v.trim();
+}
+function ensureDisplayFrom(rawFrom: string): string {
+  // Если FROM — просто адрес, добавим имя отправителя
+  if (!hasAngleAddress(rawFrom)) {
+    return `Broms IT <${rawFrom}>`;
+  }
+  return rawFrom.trim();
+}
+function isTruthy(v?: string) {
+  if (!v) return false;
+  const s = v.trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes";
+}
+
 /** Чтение и валидация SMTP-переменных окружения */
 function readSmtpEnv() {
   const host = (process.env.SMTP_HOST || "").trim();
   const port = Number(process.env.SMTP_PORT || 465);
   const user = (process.env.SMTP_USER || "").trim();
   const pass = (process.env.SMTP_PASS || "").trim();
-  const from =
-    (process.env.SMTP_FROM || user || "no-reply@example.com").trim();
+  const fromRaw = (process.env.SMTP_FROM || user || "no-reply@example.com").trim();
   const authMethod = (process.env.SMTP_AUTH_METHOD || "").trim() as
     | "LOGIN"
     | "PLAIN"
     | "";
-  const pool = (process.env.SMTP_POOL || "").trim();
+  const pool = isTruthy(process.env.SMTP_POOL);
+  const appBase = (process.env.APP_BASE_URL || "").trim().replace(/\/+$/, ""); // без завершающего /
 
   if (!host) throw new Error("SMTP_HOST is not set");
   if (!user) throw new Error("SMTP_USER is not set");
   if (!pass) throw new Error("SMTP_PASS is not set");
-  if (
-    pass === "/* secret */" ||
-    /[*●]+/.test(pass) ||
-    pass.toLowerCase().includes("secret")
-  ) {
-    throw new Error(
-      "SMTP_PASS looks like a placeholder; do not pass masked secrets to transporter",
-    );
+  if (pass === "/* secret */" || /[*●]+/.test(pass) || pass.toLowerCase().includes("secret")) {
+    throw new Error("SMTP_PASS looks masked; pass the real secret value");
   }
-  if (!Number.isFinite(port) || port <= 0) {
-    throw new Error("SMTP_PORT is not a valid number");
-  }
+  if (!Number.isFinite(port) || port <= 0) throw new Error("SMTP_PORT is not a valid number");
+
+  // В заголовке From лучше иметь 'Name <addr>', а конверт возьмём чистый адрес
+  const from = ensureDisplayFrom(fromRaw);
+  const envelopeFrom = extractAddress(fromRaw);
 
   return {
     host,
     port,
     user,
     pass,
-    from,
+    from,          // заголовок From
+    envelopeFrom,  // Return-Path
     authMethod: authMethod || undefined,
-    pool: pool === "1" || pool.toLowerCase() === "true",
+    pool,
+    appBase,       // для List-Unsubscribe (URL)
   };
 }
 
@@ -50,66 +69,66 @@ function createMailer(): Transporter {
   return createTransport({
     host,
     port,
-    secure: useTls465,
-    requireTLS: !useTls465, // для 587
-    name: "broms-it.ru", // EHLO name
-    auth: { user, pass },
-    ...(authMethod ? { authMethod } : {}),
-    tls: { servername: host },
-    // Пул можно включить env-переменной (опционально)
-    ...(pool
-      ? { pool: true, maxConnections: 3, maxMessages: 50 }
-      : undefined),
+    secure: useTls465,         // 465 — true
+    requireTLS: !useTls465,    // 587 — STARTTLS
+    name: "broms-it.ru",       // EHLO name → помогает с HELO/EHLO у некоторых фильтров
+    auth: { user, pass, ...(authMethod ? { method: authMethod } : {}) },
+    tls: {
+      servername: host,        // SNI
+      // rejectUnauthorized: true — по умолчанию true; не ослабляем безопасность
+    },
+    ...(pool ? { pool: true, maxConnections: 3, maxMessages: 50 } : undefined),
     connectionTimeout: 45_000,
     socketTimeout: 45_000,
-    logger: true,
-    debug: true,
+    // logger/debug можно выключить в проде:
+    logger: false,
+    debug: false,
   });
 }
 
-/** Универсальная отправка: verify() → sendMail() с Envelope-From и заголовками */
+/** Общая отправка письма: verify() → sendMail() с корректным Envelope-From и заголовками */
 async function sendMailSafe(opts: {
   to: string;
   subject: string;
   html: string;
   text?: string;
-  fromOverride?: string;
+  fromOverride?: string; // если нужно переопределить видимый From
 }): Promise<void> {
   const mailer = createMailer();
-  const { from } = readSmtpEnv();
+  const { from, envelopeFrom, appBase } = readSmtpEnv();
 
-  // Чёткая проверка доступности SMTP и кредов
+  // Проверим доступность SMTP и валидность кредов
   await mailer.verify();
 
-  const envelopeFrom = /<(.+?)>/.test(from)
-    ? (from.match(/<(.+?)>/) as RegExpMatchArray)[1]
-    : from;
+  // Заголовки для антиспам-фильтров (List-Unsubscribe: mailto + opc URL)
+  const unsubscribeMailto = `<mailto:${envelopeFrom}>`;
+  const unsubscribeUrl = appBase ? `<${appBase}/unsubscribe>` : undefined;
+
+  const headers: Record<string, string> = {
+    "X-Mailer": "BromsIT",
+    "List-Unsubscribe": unsubscribeUrl ? `${unsubscribeMailto}, ${unsubscribeUrl}` : unsubscribeMailto,
+  };
+  if (unsubscribeUrl) {
+    headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  }
+
+  // Стабильный Message-ID на домене
+  const messageId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@broms-it.ru>`;
 
   await mailer.sendMail({
-    from: opts.fromOverride || from, // заголовок From
+    from: opts.fromOverride || from,        // видимый From (может быть "Name <addr>")
     to: opts.to,
     subject: opts.subject,
     html: opts.html,
-    text: opts.text,
-    // ВАЖНО: конверт письма (Return-Path) = реальный ящик домена
-    envelope: { from: envelopeFrom, to: opts.to },
-    // Уникальный message-id на вашем домене — лучше для фильтров
-    messageId: `<${Date.now()}.${Math.random()
-      .toString(36)
-      .slice(2)}@broms-it.ru>`,
-    headers: {
-      "X-Mailer": "BromsIT",
-      // Невредный служебный заголовок; некоторым фильтрам нравится
-      "List-Unsubscribe": `<mailto:${envelopeFrom}>`,
-    },
+    text: opts.text || opts.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+    envelope: { from: envelopeFrom, to: opts.to }, // Return-Path
+    messageId,
+    headers,
   });
 }
 
 /** ===== Письмо подтверждения e-mail ===== */
-export async function sendVerificationEmail(
-  to: string,
-  verifyUrl: string,
-): Promise<void> {
+export async function sendVerificationEmail(to: string, verifyUrl: string): Promise<void> {
   const subject = "Подтверждение e-mail в Broms IT";
   const text = `Подтвердите e-mail: ${verifyUrl}
 Ссылка активна 24 часа. Если вы не регистрировались — проигнорируйте письмо.`;
@@ -128,11 +147,12 @@ export async function sendVerificationEmail(
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/>
       <p style="color:#6b7280;font-size:12px">Если вы не регистрировались — просто проигнорируйте это письмо.</p>
     </div>
-  `;
+  `.trim();
 
   try {
     await sendMailSafe({ to, subject, html, text });
   } catch (e: any) {
+    // Типичные кейсы: EAUTH (креды), ETIMEDOUT (сеть), EENVELOPE/ESOCKET
     if (e?.responseCode === 535 || e?.code === "EAUTH") {
       throw new Error("SMTP auth failed (wrong user or password)");
     }
@@ -144,10 +164,7 @@ export async function sendVerificationEmail(
 }
 
 /** ===== Письмо для сброса пароля ===== */
-export async function sendPasswordResetEmail(
-  to: string,
-  resetUrl: string,
-): Promise<void> {
+export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
   const subject = "Сброс пароля в Broms IT";
   const text = `Мы получили запрос на сброс пароля. Перейдите по ссылке (действует 1 час): ${resetUrl}
 Если вы не запрашивали сброс — проигнорируйте письмо.`;
@@ -164,7 +181,7 @@ export async function sendPasswordResetEmail(
       <p>Ссылка (на случай проблем):<br><a href="${resetUrl}">${resetUrl}</a></p>
       <p style="color:#6b7280;font-size:12px">Если вы не запрашивали сброс — проигнорируйте это письмо.</p>
     </div>
-  `;
+  `.trim();
 
   try {
     await sendMailSafe({ to, subject, html, text });
