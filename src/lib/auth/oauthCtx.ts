@@ -1,17 +1,42 @@
-let _provider: string | undefined;
-let _providerAccountId: string | undefined;
-let _email: string | undefined;
+import { AsyncLocalStorage } from "node:async_hooks";
 
-export function setOAuthCtxProvider(p?: string, pid?: string) {
-  _provider = p;
-  _providerAccountId = pid;
+type OAuthContextStore = {
+  provider?: string;
+  providerAccountId?: string;
+  email?: string;
+};
+
+const storage = new AsyncLocalStorage<OAuthContextStore>();
+
+function currentStore(): OAuthContextStore | undefined {
+  return storage.getStore();
 }
+
+export function runWithOAuthCtx<T>(fn: () => T): T {
+  return storage.run({}, fn);
+}
+
+export function setOAuthCtxProvider(provider?: string, providerAccountId?: string) {
+  const store = currentStore();
+  if (!store) return;
+  store.provider = provider;
+  store.providerAccountId = providerAccountId;
+}
+
 export function setOAuthCtxEmail(email?: string) {
-  _email = email;
+  const store = currentStore();
+  if (!store) return;
+  store.email = email;
 }
+
 export function getOAuthCtx() {
-  return { provider: _provider, providerAccountId: _providerAccountId, email: _email };
+  return currentStore() ?? {};
 }
+
 export function clearOAuthCtx() {
-  _provider = _providerAccountId = _email = undefined;
+  const store = currentStore();
+  if (!store) return;
+  store.provider = undefined;
+  store.providerAccountId = undefined;
+  store.email = undefined;
 }

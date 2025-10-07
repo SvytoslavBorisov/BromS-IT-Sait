@@ -32,7 +32,17 @@ export default function ContactForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, phone, message }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        // пробуем вытащить { error } из JSON
+        let msg = "Не удалось отправить сообщение";
+        try {
+          const j = await res.json();
+          if (j?.error) msg = j.error;
+        } catch {
+          msg = await res.text();
+        }
+        throw new Error(msg);
+      }
       setState("ok");
       setName(""); setEmail(""); setPhone(""); setMessage("");
     } catch (e: any) {
@@ -71,7 +81,7 @@ export default function ContactForm() {
         />
       </Field>
 
-      {/* Email / Телефон в одну строку на десктопе */}
+      {/* Email / Телефон */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field>
           <Input
@@ -154,11 +164,9 @@ export default function ContactForm() {
 }
 
 /* ===== Вспомогательные компоненты ===== */
-
 function Field({ children }: { children: React.ReactNode }) {
   return <div className="relative">{children}</div>;
 }
-
 function Input({
   id, label, value, onChange, type = "text", autoComplete, required, placeholder,
 }: {
@@ -194,13 +202,10 @@ function Input({
       >
         {label}
       </label>
-      {placeholder && (
-        <span className="sr-only">{placeholder}</span>
-      )}
+      {placeholder && <span className="sr-only">{placeholder}</span>}
     </div>
   );
 }
-
 function Textarea({
   id, label, value, onChange, rows = 5, required,
 }: {
@@ -236,7 +241,6 @@ function Textarea({
     </div>
   );
 }
-
 function Spinner() {
   return (
     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
