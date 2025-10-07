@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyHPT } from "@/lib/captcha/hpt";
 import crypto from "crypto";
-import { sendPasswordResetEmail } from "@/lib/auth/email_mail";
+import { sendPasswordResetEmail } from "@/lib/auth/email";
 import { cookies } from "next/headers";
 import { extractIpUa } from "@/lib/auth/utils";
 

@@ -6,7 +6,7 @@ export const revalidate = 0;
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateVerificationToken } from "@/lib/auth/tokens";
-import { sendVerificationEmail } from "@/lib/auth/email"; // или email_mail если так задумано
+import { sendVerificationEmail } from "@/lib/auth/email"; 
 import { verifyHPT } from "@/lib/captcha/hpt";
 import { extractIpUa } from "@/lib/auth/utils";
 import { cookies } from "next/headers";

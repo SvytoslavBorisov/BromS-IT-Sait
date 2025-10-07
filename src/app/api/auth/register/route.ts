@@ -9,7 +9,7 @@ import { hash as bcryptHash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { jwkFingerprint } from "@/lib/crypto/fingerprint";
 import { generateVerificationToken } from "@/lib/auth/tokens";
-import { sendVerificationEmail } from "@/lib/auth/email_mail";
+import { sendVerificationEmail } from "@/lib/auth/email";
 import { verifyHPT } from "@/lib/captcha/hpt";
 import { extractIpUa } from "@/lib/auth/utils";
 import { cookies } from "next/headers";
