@@ -1,8 +1,9 @@
+// src/app/api/auth/forgot/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyHPT } from "@/lib/captcha/hpt";
 import crypto from "crypto";
-import { sendPasswordResetEmail } from "@/lib/auth/email";
+import { sendPasswordResetEmail } from "@/lib/auth/email_mail";
 import { cookies } from "next/headers";
 import { extractIpUa } from "@/lib/auth/utils";
 
@@ -26,11 +27,10 @@ export async function POST(req: Request) {
     const { ua, ip } = extractIpUa(req);
 
     if (!verifyHPT(hpt, { ua, ip, requireScope: "auth:forgot" })) {
-      // единый ответ без утечки деталей
       return makeJson({ ok: false, error: "HPT_REQUIRED" }, 429);
     }
 
-    // 2) Не выдаём, существует ли email
+    // 2) Если email не передан — отвечаем одинаково (без утечек)
     if (!email) {
       return makeJson({ ok: true, message: "Если адрес найден, мы отправили письмо" });
     }
@@ -39,10 +39,23 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({
       where: { email: identifier },
-      select: { id: true },
+      select: { id: true, emailVerified: true },
     });
 
-    // Всегда отвечаем одинаково
+    // 2.1) По твоей просьбе: если пользователь найден, но email не подтверждён — сообщаем явно.
+    // (Это намеренная "утечка" факта существования, ты её запросил.)
+    if (user && !user.emailVerified) {
+      return makeJson(
+        {
+          ok: false,
+          error: "EMAIL_NOT_VERIFIED",
+          message: "E-mail не подтверждён. Сначала подтвердите адрес.",
+        },
+        400
+      );
+    }
+
+    // 2.2) Если не найден — отвечаем без утечек
     if (!user) {
       return makeJson({ ok: true, message: "Если адрес найден, мы отправили письмо" });
     }
@@ -58,9 +71,9 @@ export async function POST(req: Request) {
     });
 
     // 4) Ссылка
-    const base = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL!;
+    const base = (process.env.APP_BASE_URL || process.env.NEXTAUTH_URL || "").replace(/\/+$/, "");
     const url =
-      `${base.replace(/\/+$/, "")}/auth/reset` +
+      `${base}/auth/reset` +
       `?email=${encodeURIComponent(identifier)}&token=${encodeURIComponent(rawToken)}`;
 
     await sendPasswordResetEmail(identifier, url);

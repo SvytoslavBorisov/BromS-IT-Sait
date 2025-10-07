@@ -1,36 +1,57 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-export function middleware(req: NextRequest) {
-  const res = NextResponse.next();
-  res.headers.set('X-Content-Type-Options', 'nosniff');
-  res.headers.set('X-Frame-Options', 'DENY');
-  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.headers.set('Permissions-Policy', [
-    "geolocation=()",
-    "camera=()",
-    "microphone=()",
-    "payment=()",
-  ].join(', '));
-  // CSP: корректно под свои домены/скрипты
-  res.headers.set('Content-Security-Policy', [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "connect-src 'self'",
-    "font-src 'self' data:",
-    "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join('; '));
-  // Включи HSTS только если обязателен HTTPS:
-  if (process.env.NODE_ENV === 'production') {
-    res.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-  }
-  return res;
+// ПУБЛИЧНЫЕ маршруты, доступные без сессии
+const PUBLIC_PATHS = new Set<string>([
+  "/",                      // если нужна публичная главная
+  "/auth/login",
+  "/auth/register",
+  "/auth/check-email",      // ← ВАЖНО: страница «проверьте почту»
+  "/auth/verify",           // подтверждение e-mail по токену
+  "/auth/resend",           // повторная отправка письма
+]);
+
+// Префиксы путей, которые всегда публичны
+const PUBLIC_PREFIXES = [
+  "/api/auth/register",     // ваш POST регистрации
+  "/api/auth/verify",
+  "/api/auth/resend-verification",
+  "/_next",                 // статика Next
+  "/favicon.ico",
+  "/images",
+  "/public",
+];
+
+function isPublicPath(pathname: string) {
+  if (PUBLIC_PATHS.has(pathname)) return true;
+  return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // Публичные пути пропускаем без проверки токена
+  if (isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Проверяем сессию (JWT). Настройте секрет через NEXTAUTH_SECRET
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token) {
+    const url = new URL("/auth/login", req.url);
+    // Сохраним, куда хотели попасть
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
+}
+
+// Ограничим зону действия middleware (исключим ассеты и статику)
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    // всё, кроме ассетов/_next иконок и т.п.
+    "/((?!_next|favicon.ico|images|public|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|map|txt)).*)",
+  ],
 };

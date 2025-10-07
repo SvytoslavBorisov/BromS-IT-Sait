@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ensureHuman } from "@/lib/captcha/ensureHuman";
 import { storePrivateJwk } from "@/lib/crypto/secure-storage"; // твой модуль
 import { jwkFingerprint } from "@/lib/crypto/fingerprint";     // твой модуль
@@ -14,9 +13,11 @@ export type Department = { id: string; title: string; companyId: string };
 export type Position   = { id: string; title: string; companyId: string; rank: number };
 export type Manager    = { id: string; name: string | null; surname: string | null; patronymic: string | null; email: string; positionId: string | null; departmentId: string | null };
 
-export function useRegister() {
-  const router = useRouter();
+type RegisterResult =
+  | { ok: true; redirectTo?: string; message?: string }
+  | { ok: false; error?: string; message?: string };
 
+export function useRegister() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -41,7 +42,7 @@ export function useRegister() {
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
 
-  // Первичная загрузка справочников
+  // Первичная загрузка справочников (оставлю закомментированным, как у тебя)
   // useEffect(() => {
   //   (async () => {
   //     try {
@@ -82,6 +83,7 @@ export function useRegister() {
         setError("Сетевая ошибка при загрузке отделов/должностей");
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]);
 
   // Дозагрузка менеджеров при смене отдела
@@ -99,6 +101,7 @@ export function useRegister() {
         }
       } catch { /* no-op */ }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, departmentId]);
 
   const managersView = useMemo(
@@ -109,9 +112,14 @@ export function useRegister() {
     [managers]
   );
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  /**
+   * Сабмит регистрации.
+   * Возвращает результат сервера: { ok, redirectTo?, error? }.
+   * Роутинг НЕ делаем здесь — пусть компонент-форма делает редирект по redirectTo.
+   */
+  const handleSubmit = async (e: React.FormEvent): Promise<RegisterResult> => {
     e.preventDefault();
-    if (submittingRef.current) return;
+    if (submittingRef.current) return { ok: false, error: "already_submitting" };
     submittingRef.current = true;
 
     setError(null);
@@ -119,32 +127,32 @@ export function useRegister() {
 
     try {
       // 1) Генерация ДОЛГОВРЕМЕННОЙ транспортной пары ГОСТ (ECIES-GOST-2012-256) на клиенте
-      let { publicJwk, privateJwk } = await generateGostKeyPair();
+      const { publicJwk, privateJwk } = await generateGostKeyPair();
 
-      // Нормализация (если генератор уже всё выставляет — это не изменит значения)
+      // Нормализация (на случай если генератор не заполнил)
       (publicJwk  as any).alg     = (publicJwk  as any).alg ?? "ECIES-GOST-2012-256";
       (privateJwk as any).alg     = (privateJwk as any).alg ?? "ECIES-GOST-2012-256";
       (publicJwk  as any).key_ops = (publicJwk  as any).key_ops ?? ["encrypt","wrapKey"];
       (privateJwk as any).key_ops = (privateJwk as any).key_ops ?? ["decrypt","unwrapKey"];
 
-      // 2) Сохранить приватный JWK локально (твой secure-storage; проверь, что он шифрует at-rest)
-      // Пока адресуем по email; после первого логина лучше мигрировать хранение под стабильный userId
+      // 2) Сохранить приватный JWK локально (твой secure-storage)
       await storePrivateJwk(email, privateJwk);
 
-      // 3) Отпечаток публичного ключа (твой fingerprint.tsx)
+      // 3) Отпечаток публичного ключа
       const pubFp = await jwkFingerprint(publicJwk);
 
+      // 4) HPT/капча — ВАЖНО: совпадает со scope, который ждёт сервер!
       await ensureHuman("register");
 
-      // 4) Регистрация на сервере
-      const body = {
+      // 5) Регистрация на сервере
+      const payload = {
         name: name || undefined,
         surname: surname || undefined,
         patronymic: patronymic || undefined,
         age: age || undefined,
         sex: sex || undefined,
         email,
-        password, // сервер создаст UserPassword при наличии
+        password,
         image: image || undefined,
         companyId: companyId || undefined,
         departmentId: departmentId || undefined,
@@ -160,18 +168,25 @@ export function useRegister() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        router.push("/auth/login");
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || "Не удалось зарегистрироваться");
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && (data?.ok ?? true)) {
+        // Возвращаем redirectTo наверх — форма сама сделает router.replace
+        return { ok: true, redirectTo: data?.redirectTo, message: data?.message };
       }
+
+      // Ошибка с сервера
+      const msg = data?.message || data?.error || "Не удалось зарегистрироваться";
+      setError(msg);
+      return { ok: false, error: data?.error || "register_failed", message: msg };
     } catch (err) {
       console.error(err);
-      setError("Ошибка при генерации ключа или сети. Попробуйте ещё раз");
+      const msg = "Ошибка при генерации ключа или сети. Попробуйте ещё раз";
+      setError(msg);
+      return { ok: false, error: "exception", message: msg };
     } finally {
       setLoading(false);
       submittingRef.current = false;

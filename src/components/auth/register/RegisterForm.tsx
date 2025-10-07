@@ -5,21 +5,70 @@ import React, { useEffect, useRef } from "react";
 import Header from "./ui/Header";
 import { useRegister } from "@/hooks/useRegister";
 import ErrorAlert from "./ErrorAlert";
+import { useRouter } from "next/navigation";
 
-export default function RegisterForm() {
+type Props = {
+  /** Если передать, то при успешной регистрации останемся в текущем окне и покажем экран «Проверьте почту» */
+  onRegistered?: (email: string) => void;
+};
+
+export default function RegisterForm({ onRegistered }: Props) {
+  const router = useRouter();
+
   const {
-    email, setEmail, password, setPassword,
-    name, setName, surname, setSurname, age, setAge,
-    error, setError, loading, handleSubmit,
+    email,
+    setEmail,
+    password,
+    setPassword,
+    name,
+    setName,
+    surname,
+    setSurname,
+    age,
+    setAge,
+    error,
+    setError,
+    loading,
+    handleSubmit,
   } = useRegister();
 
   const mounted = useRef(false);
-  useEffect(() => { mounted.current = true; }, []);
+  useEffect(() => {
+    mounted.current = true;
+  }, []);
 
   const inputBase =
     "w-full rounded-xl border border-gray-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/40 outline-none px-4 py-2.5 text-gray-900 placeholder:text-gray-400 transition";
   const labelBase = "mb-1.5 block text-sm font-medium text-gray-700";
   const clearError = () => error && setError(null);
+
+  // Сабмит: используем handleSubmit из хука. При успехе:
+  // - если есть onRegistered => показываем экран «Проверьте почту» в текущем окне;
+  // - иначе (на случай старого контейнера) — делаем мягкий редирект на /auth/check-email.
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    try {
+      const result: any = await handleSubmit(e);
+
+      if (result?.ok) {
+        const target =
+          result.redirectTo ||
+          `/auth/check-email?email=${encodeURIComponent(email || "")}`;
+
+        if (typeof onRegistered === "function") {
+          onRegistered(email || "");
+        } else {
+          router.replace(target);
+        }
+        return;
+      }
+
+      if (result?.error) setError(result.error);
+      else setError("Регистрация не завершена. Попробуйте ещё раз.");
+    } catch {
+      setError("Сбой сети или сервера");
+    }
+  }
 
   return (
     <div
@@ -38,26 +87,36 @@ export default function RegisterForm() {
       <div className="px-2 py-4 md:p-8">
         <ErrorAlert message={error ?? ""} />
         {!mounted.current ? null : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={onSubmit} className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="name" className={labelBase}>Имя</label>
+                <label htmlFor="name" className={labelBase}>
+                  Имя
+                </label>
                 <input
                   id="name"
                   className={inputBase}
                   value={name}
-                  onChange={(e) => { setName(e.target.value); clearError(); }}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    clearError();
+                  }}
                   placeholder="Иван"
                   autoComplete="given-name"
                 />
               </div>
               <div>
-                <label htmlFor="surname" className={labelBase}>Фамилия</label>
+                <label htmlFor="surname" className={labelBase}>
+                  Фамилия
+                </label>
                 <input
                   id="surname"
                   className={inputBase}
                   value={surname}
-                  onChange={(e) => { setSurname(e.target.value); clearError(); }}
+                  onChange={(e) => {
+                    setSurname(e.target.value);
+                    clearError();
+                  }}
                   placeholder="Иванов"
                   autoComplete="family-name"
                 />
@@ -65,40 +124,55 @@ export default function RegisterForm() {
             </div>
 
             <div>
-              <label htmlFor="age" className={labelBase}>Дата рождения</label>
+              <label htmlFor="age" className={labelBase}>
+                Дата рождения
+              </label>
               <input
                 id="age"
                 type="date"
                 className={inputBase}
                 value={age}
-                onChange={(e) => { setAge(e.target.value); clearError(); }}
+                onChange={(e) => {
+                  setAge(e.target.value);
+                  clearError();
+                }}
                 autoComplete="bday"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className={labelBase}>Email *</label>
+              <label htmlFor="email" className={labelBase}>
+                Email *
+              </label>
               <input
                 id="email"
                 type="email"
                 required
                 className={inputBase}
                 value={email}
-                onChange={(e) => { setEmail(e.target.value); clearError(); }}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  clearError();
+                }}
                 placeholder="you@example.com"
                 autoComplete="email"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className={labelBase}>Пароль *</label>
+              <label htmlFor="password" className={labelBase}>
+                Пароль *
+              </label>
               <input
                 id="password"
                 type="password"
                 required
                 className={inputBase}
                 value={password}
-                onChange={(e) => { setPassword(e.target.value); clearError(); }}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  clearError();
+                }}
                 placeholder="••••••••"
                 autoComplete="new-password"
               />

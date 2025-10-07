@@ -1,28 +1,43 @@
+// src/app/api/auth/resend-verification/route.ts
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateVerificationToken } from "@/lib/auth/tokens";
-import { sendVerificationEmail } from "@/lib/auth/email";
-
-// ▼ ДОБАВЬ:
+import { sendVerificationEmail } from "@/lib/auth/email"; // или email_mail если так задумано
 import { verifyHPT } from "@/lib/captcha/hpt";
 import { extractIpUa } from "@/lib/auth/utils";
+import { cookies } from "next/headers";
 
 export async function POST(request: Request) {
   try {
-    // ▼ НОВОЕ: проверяем HPT (auth:resend)
+    // 1) HPT: берём как в регистрации — через cookies(), плюс fallback из заголовка
     const { ip, ua } = extractIpUa(request);
-    const cookie = (request.headers as any)?.get?.("cookie") || "";
-    const hpt = cookie.split(/;\s*/).find((c: string) => c.startsWith("hpt="))?.split("=")[1] ?? "";
+
+    const cookieStore = await cookies();
+    const cookieHpt = cookieStore.get("hpt")?.value ?? "";
+
+    const hdrHpt =
+      (request.headers as any)?.get?.("x-hpt")?.toString?.() ?? "";
+
+    const hpt = hdrHpt || cookieHpt;
+
     if (!hpt || !verifyHPT(hpt, { ua, ip, requireScope: "auth:resend" })) {
-      return NextResponse.json({ ok: false, message: "captcha_required" }, { status: 401 });
+      // В регистрации ты возвращаешь 403 при captcha_required — делаем так же
+      return NextResponse.json({ ok: false, message: "captcha_required" }, { status: 403 });
     }
 
-    const { email } = await request.json();
-    if (!email) return NextResponse.json({ ok: false, message: "Укажите email" }, { status: 400 });
+    // 2) Параметры
+    const { email } = await request.json().catch(() => ({} as any));
+    if (!email) {
+      return NextResponse.json({ ok: false, message: "Укажите email" }, { status: 400 });
+    }
 
     const user = await prisma.user.findUnique({ where: { email } });
 
-    // anti-enumeration: отвечаем одинаково
+    // 3) Анти-энумерация: одинаковый ответ
     if (!user || user.emailVerified) {
       return NextResponse.json({
         ok: true,
@@ -30,7 +45,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // не спамим, если уже есть неистёкший токен
+    // 4) Не спамим, если есть неистёкший
     const existing = await prisma.verificationToken.findFirst({
       where: { identifier: email, expires: { gt: new Date() } },
     });
@@ -41,12 +56,16 @@ export async function POST(request: Request) {
       });
     }
 
+    // 5) Генерация нового токена
     const { token, hashedToken, expires } = generateVerificationToken(24);
-    await prisma.verificationToken.deleteMany({ where: { identifier: email } });
-    await prisma.verificationToken.create({
-      data: { identifier: email, token: hashedToken, expires },
-    });
+    await prisma.$transaction([
+      prisma.verificationToken.deleteMany({ where: { identifier: email } }),
+      prisma.verificationToken.create({
+        data: { identifier: email, token: hashedToken, expires },
+      }),
+    ]);
 
+    // 6) Ссылка подтверждения
     const origin = process.env.APP_BASE_URL || new URL(request.url).origin;
     const verifyUrl = new URL("/api/auth/verify", origin);
     verifyUrl.searchParams.set("token", token);
@@ -54,8 +73,14 @@ export async function POST(request: Request) {
 
     await sendVerificationEmail(email, verifyUrl.toString());
 
-    return NextResponse.json({ ok: true, message: "Письмо отправлено. Проверьте почту." });
-  } catch {
-    return NextResponse.json({ ok: false, message: "Ошибка отправки" }, { status: 400 });
+    return NextResponse.json({
+      ok: true,
+      message: "Письмо отправлено. Проверьте почту.",
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, message: "Ошибка отправки" },
+      { status: 400 },
+    );
   }
 }

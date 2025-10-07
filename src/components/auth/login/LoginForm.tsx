@@ -13,8 +13,11 @@ import Links from "./parts/Links";
 import Social from "./parts/Social";
 import { ensureHuman } from "@/lib/captcha/ensureHuman";
 
+type Props = {
+  onForgot?: () => void; // ← добавили
+};
 
-export default function LoginForm() {
+export default function LoginForm({ onForgot }: Props) { // ← принимаем проп
   const {
     email, setEmail,
     password, setPassword,
@@ -51,7 +54,11 @@ export default function LoginForm() {
         body: JSON.stringify({ email }),
       });
       const data = await resp.json().catch(() => ({}));
-      setResendMsg(resp.ok ? (data?.message || "Письмо отправлено.") : (data?.message || "Не удалось отправить письмо."));
+      setResendMsg(
+        resp.ok
+          ? (data?.message || "Письмо отправлено.")
+          : (data?.message || "Не удалось отправить письмо.")
+      );
     } catch {
       setResendMsg("Подтвердите, что вы не бот и попробуйте снова.");
     } finally {
@@ -101,12 +108,13 @@ export default function LoginForm() {
             onToggleShow={toggleShowPass}
           />
           <SubmitButton loading={loading} />
-          <Links />
+
+          {/* ← просто пробрасываем onForgot внутрь Links */}
+          <Links onForgot={onForgot} />
         </form>
 
         {/* Социальные кнопки через next-auth */}
         <Social />
-
       </div>
     </div>
   );

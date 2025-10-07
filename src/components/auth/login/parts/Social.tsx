@@ -1,79 +1,123 @@
-// src/components/auth/login/parts/Social.tsx
 "use client";
 
-import { useEffect } from "react";
-import { YandexTile } from "../../YandexButton";
+import { useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
+import { YandexButton } from "../../YandexButton";
+
+const isProd = process.env.NODE_ENV === "production";
 
 export default function Social() {
-  const isLocalhost = typeof window !== "undefined" && window.location.hostname === "localhost";
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!isLocalhost) {
-      // Загружаем VKID SDK только на проде/HTTPS
-      const script = document.createElement("script");
-      script.src = "https://unpkg.com/@vkid/sdk@<3.0.0/dist-sdk/umd/index.js";
-      script.async = true;
-      script.onload = () => {
-        if ("VKIDSDK" in window) {
-          const VKID = (window as any).VKIDSDK;
+    if (!isProd) return;
 
-          VKID.Config.init({
-            app: 54194015,
-            redirectUrl: "https://broms-it.ru/auth",
-            responseMode: VKID.ConfigResponseMode.Callback,
-            source: VKID.ConfigSource.LOWCODE,
-            scope: "", // укажи нужные права, например "email"
-          });
+    // грузим VK SDK
+    const script = document.createElement("script");
+    script.src = "https://unpkg.com/@vkid/sdk@^3/dist-sdk/umd/index.js";
+    script.async = true;
 
-          const oneTap = new VKID.OneTap();
-          oneTap.render({
-            container: document.getElementById("vkid-widget-container"),
-            showAlternativeLogin: true,
-          })
-          .on(VKID.WidgetEvents.ERROR, (err: any) => console.error("VKID Error:", err))
-          .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, (payload: any) => {
-            VKID.Auth.exchangeCode(payload.code, payload.device_id)
-              .then((data: any) => console.log("VKID success:", data))
-              .catch((err: any) => console.error("VKID auth error:", err));
-          });
-        }
-      };
-      document.body.appendChild(script);
-    }
-  }, [isLocalhost]);
+    // переменные для снятия подписок и корректной зачистки
+    let offError: (() => void) | null = null;
+    let offLogin: (() => void) | null = null;
+    let vkOneTap: any = null;
+
+    const onLoad = () => {
+      try {
+        const VKID = (window as any).VKID || (window as any).VKIDSDK;
+        if (!VKID || !containerRef.current) return;
+
+        VKID.Config.init({
+          app: 54194015,
+          redirectUrl: "https://broms-it.ru/auth/after-oauth",
+          responseMode: VKID.ConfigResponseMode.Callback,
+          source: VKID.ConfigSource.LOWCODE,
+          scope: "",
+        });
+
+        vkOneTap = new VKID.OneTap();
+        const widget = vkOneTap.render({
+          container: containerRef.current,
+          showAlternativeLogin: true,
+        });
+
+        // запоминаем off-функции, если SDK их возвращает
+        offError = widget.on?.(VKID.WidgetEvents.ERROR, () => {});
+        offLogin = widget.on?.(
+          VKID.OneTapInternalEvents.LOGIN_SUCCESS,
+          (payload: { code: string; device_id: string }) => {
+            VKID.Auth.exchangeCode(payload.code, payload.device_id).catch(() => {});
+          }
+        );
+      } catch {
+        // игнор — просто не монтируем виджет
+      }
+    };
+
+    const onError = () => {};
+
+    script.addEventListener("load", onLoad);
+    script.addEventListener("error", onError);
+    document.body.appendChild(script);
+
+    return () => {
+      // 1) снимаем слушатели SDK
+      try { offError && offError(); } catch {}
+      try { offLogin && offLogin(); } catch {}
+      try { vkOneTap?.destroy?.(); } catch {}
+
+      // 2) чистим контейнер ДО того, как React начнёт трогать детей
+      if (containerRef.current) {
+        try {
+          containerRef.current.replaceChildren(); // безопасно удаляет всех потомков
+        } catch {}
+      }
+
+      // 3) убираем <script>
+      try {
+        script.removeEventListener("load", onLoad);
+        script.removeEventListener("error", onError);
+        script.remove();
+      } catch {}
+    };
+  }, []);
 
   return (
-    <div className="mt-7 space-y-3">
-      <div className="flex items-center gap-3">
+    <div className="mt-8 space-y-5">
+      <div className="flex items-center gap-4">
         <div className="h-px flex-1 bg-neutral-200" />
         <span className="text-xs text-neutral-500">или войдите через</span>
         <div className="h-px flex-1 bg-neutral-200" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {isLocalhost ? (
-          // fallback: обычная кнопка VK через next-auth на локале
-          <button
-            onClick={() => signIn("vk", { callbackUrl: "/auth/after-oauth?next=/profile" })}
-            className="group relative flex items-center justify-center h-12 rounded-2xl bg-[#0077FF] text-white
-                       ring-1 ring-black/10 hover:ring-black/20 transition overflow-hidden
-                       hover:scale-[1.03] active:scale-[0.98] duration-200 ease-out"
-            aria-label="Войти через ВКонтакте"
-          >
-            <span className="absolute inset-0 -translate-x-full group-hover:translate-x-0 transition-transform duration-500
-                             bg-gradient-to-r from-white/0 via-white/15 to-white/0" />
-            <span className="text-xl font-black leading-none transform group-hover:scale-110 transition-transform">
-              VK
-            </span>
-          </button>
-        ) : (
-          // VKID One Tap на проде
-          <div id="vkid-widget-container" />
-        )}
+      {/* мобила: колонка; ≥sm: в ряд */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        {/* VK блок: DEV — кнопка, PROD — контейнер для OneTap */}
+        <div className="flex-1 min-w-0">
+          {isProd ? (
+            <div
+              ref={containerRef}
+              className="h-12 w-full flex items-center justify-center"
+            />
+          ) : (
+            <button
+              onClick={() =>
+                signIn("vk", { callbackUrl: "/auth/after-oauth?next=/profile" })
+              }
+              className="w-full h-12 rounded-2xl bg-[#0077FF] text-white font-medium
+                         ring-1 ring-black/10 hover:ring-black/20 transition
+                         hover:brightness-110 active:scale-[0.98]"
+              aria-label="Войти через VK ID"
+            >
+              Войти через VK ID
+            </button>
+          )}
+        </div>
 
-        {/* Яндекс всегда */}
-        <YandexTile />
+        {/* Яндекс */}
+        <div className="flex-1 min-w-0">
+          <YandexButton className="w-full h-12 rounded-2xl" />
+        </div>
       </div>
     </div>
   );

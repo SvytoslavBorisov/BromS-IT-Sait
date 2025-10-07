@@ -69,13 +69,15 @@ export default function credentialsProvider() {
       const humanOk = !!(hpt && verifyHPT(hpt, { ua, ip, requireScope: "auth:login" }));
       if (!humanOk) {
         authLog.warn({ event: "auth.login", outcome: "blocked", reason: "captcha_required", ip, ua });
-        return null;
+        throw new Error("E_CAPTCHA_REQUIRED");
       }
 
       // Нормализация логина/пароля
       const email = (credentials?.email ?? "").toLowerCase().trim();
       const pass = credentials?.password ?? "";
-      if (!email || !pass) return null;
+      if (!email || !pass) {
+        throw new Error("E_BAD_CREDENTIALS");
+      }
 
       // Пользователь и проверка пароля
       const user = await prisma.user.findUnique({ where: { email }, include: { password: true } });
@@ -86,18 +88,18 @@ export default function credentialsProvider() {
           reason: user ? "no_password_set" : "bad_credentials",
           login: email, ip, ua, latencyMs: Date.now() - t0
         });
-        return null;
+        throw new Error(user ? "E_NO_PASSWORD" : "E_BAD_CREDENTIALS");
       }
 
       const valid = await bcrypt.compare(pass, user.password.hash);
       if (!valid) {
         authLog.warn({ event: "auth.login", outcome: "failure", reason: "bad_credentials", login: email, ip, ua, latencyMs: Date.now() - t0 });
-        return null;
+        throw new Error("E_BAD_CREDENTIALS");
       }
 
       if (!user.emailVerified) {
         authLog.warn({ event: "auth.login", outcome: "failure", reason: "email_not_verified", login: email, ip, ua, latencyMs: Date.now() - t0 });
-        return null;
+        throw new Error("E_EMAIL_NOT_VERIFIED");
       }
 
       authLog.info({ event: "auth.login", outcome: "success", login: email, ip, ua, latencyMs: Date.now() - t0 });
