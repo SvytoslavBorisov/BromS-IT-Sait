@@ -1,5 +1,5 @@
 // src/lib/auth/email_mail/index.ts
-import { sendMailWithFallback } from "./send";
+import { sendMailSafe } from "./send-safe";
 import { verificationTemplate, passwordResetTemplate } from "./templates/templates";
 import { logger, ensureRequestId } from "@/lib/logger";
 
@@ -8,12 +8,12 @@ const baseLog = logger.child({ module: "EmailMail" });
 /** ===== Письмо подтверждения e-mail (Mail.ru) ===== */
 export async function sendVerificationEmail(to: string, verifyUrl: string): Promise<void> {
   const requestId = ensureRequestId();
-  const log = logger.child({ module: "EmailMail", requestId });
+  const log = baseLog.child({ requestId });
 
   try {
     const { subject, text, html } = verificationTemplate(verifyUrl);
     log.info({ message: "Compose verification email", to, verifyUrl });
-    await sendMailWithFallback({ to, subject, html, text });
+    await sendMailSafe({ to, subject, html, text });
   } catch (e: any) {
     log.error({ message: "sendVerificationEmail failed", to, verifyUrl, code: e?.code || e?.responseCode });
     if (e?.responseCode === 535 || e?.code === "EAUTH") {
@@ -29,12 +29,12 @@ export async function sendVerificationEmail(to: string, verifyUrl: string): Prom
 /** ===== Письмо для сброса пароля (Mail.ru) ===== */
 export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
   const requestId = ensureRequestId();
-  const log = logger.child({ module: "EmailMail", requestId });
+  const log = baseLog.child({ requestId });
 
   try {
     const { subject, text, html } = passwordResetTemplate(resetUrl);
     log.info({ message: "Compose password reset email", to, resetUrl });
-    await sendMailWithFallback({ to, subject, html, text });
+    await sendMailSafe({ to, subject, html, text });
   } catch (e: any) {
     log.error({ message: "sendPasswordResetEmail failed", to, resetUrl, code: e?.code || e?.responseCode });
     if (e?.responseCode === 535 || e?.code === "EAUTH") {
