@@ -2,8 +2,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { emailMetrics } from "@/lib/metrics/email-mail";
 
-// Если у вас есть свой гард — раскомментируйте:
-// import { requireAdmin } from "@/lib/authz";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
